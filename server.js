@@ -125,15 +125,15 @@ app.post('/logout', (req, res) => {
 });
 // ======= конец auth =======
 
-let roulettePlayers = [];   // очередь: [{ username, bet, color }]
-let lastSpinResult = null;  // { winner, totalBet, timestamp }
-const spinInterval = 20000; // 20 сек
+let roulettePlayers = [];    // текущая очередь: [{ username, bet, color }]
+let lastSpinPlayers = null;  // «снимок» очереди перед спином
+let lastSpinResult = null;   // { winner, totalBet, timestamp, players: lastSpinPlayers }
+const spinInterval = 20000;  // 20 сек
 
-// Текущее запланированное время следующего спина (ms с эпохи). null, если пока не планировали.
-let nextSpin = null;
+let nextSpin = null;         // временная метка (ms) следующего запланированного спина
 let spinTimeoutId = null;
 
-// Генератор случайного цвета для сектора
+// Генератор случайного цвета
 function getRandomColor() {
   const letters = '0123456789ABCDEF';
   let color = '#';
@@ -144,60 +144,72 @@ function getRandomColor() {
 }
 
 /**
- * Запускает сам спин (выбирает победителя или очищает очередь),
- * записывает lastSpinResult, сбрасывает очередь.
- * Затем, если в очереди после спина снова ≥ 2 (теоретически это редко,
- * т. к. мы после каждого спина чистим очередь, но оставим проверку
- * «на всякий случай»), запускаем новый таймер;
- * иначе nextSpin остаётся null до следующего join.
+ * Функция, которая запускает спин. Вызывается через setTimeout, когда время истекает.
+ * Если игроков < 2 — просто очищает очередь без результата.
+ * Иначе формирует lastSpinPlayers, выбирает победителя, обновляет его баланс, сохраняет lastSpinResult.
  */
 function runSpin() {
   const now = Date.now();
+
   if (roulettePlayers.length < 2) {
-    // Если меньше двух — просто очищаем очередь без результата
+    // Если менее двух — просто чистим очередь без результата
     roulettePlayers = [];
     lastSpinResult = null;
+    lastSpinPlayers = null;
   } else {
+    // Делаем «снимок» очереди для анимации
+    lastSpinPlayers = roulettePlayers.map(p => ({ ...p }));
+
     const totalBet = roulettePlayers.reduce((sum, p) => sum + p.bet, 0);
     const randomAngle = Math.random() * 2 * Math.PI;
 
     let angleSum = 0;
-    let winner = roulettePlayers[roulettePlayers.length - 1];
-    for (let p of roulettePlayers) {
+    let winnerEntry = lastSpinPlayers[lastSpinPlayers.length - 1];
+    for (let p of lastSpinPlayers) {
       const sliceAngle = (p.bet / totalBet) * 2 * Math.PI;
       if (randomAngle >= angleSum && randomAngle < angleSum + sliceAngle) {
-        winner = p;
+        winnerEntry = p;
         break;
       }
       angleSum += sliceAngle;
     }
 
     // Обновляем баланс победителя
-    const winUser = findUser(winner.username);
+    const winUser = findUser(winnerEntry.username);
     if (winUser) {
-      updateUserBalance(winner.username, winUser.balance + totalBet);
+      updateUserBalance(winnerEntry.username, winUser.balance + totalBet);
     }
 
+    // Сохраняем результат
     lastSpinResult = {
-      winner: winner.username,
+      winner: winnerEntry.username,
       totalBet: totalBet,
-      timestamp: now
+      timestamp: now,
+      players: lastSpinPlayers  // сюда попадает массив участников этого спина
     };
+
+    // Очищаем очередь
     roulettePlayers = [];
   }
 
-  // После спина сбрасываем nextSpin
+  // Сбрасываем nextSpin и таймер
   nextSpin = null;
   spinTimeoutId = null;
 
-  // Если после спина в очереди (вдруг) снова ≥ 2, запускаем новый таймер
+  // Если в очереди после спина опять ≥ 2 (теоретически может успеть появиться),
+  // планируем новый
   if (roulettePlayers.length >= 2) {
     nextSpin = Date.now() + spinInterval;
     spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 }
 
-// === Endpoint → вернуть список текущих игроков ===
+// Запускаем первый «отсчёт» только когда появится второй игрок.
+// Он будет запущен внутри /roulette/join.
+
+// ========== ENDPOINTS ==========
+
+// Вернуть список текущих игроков
 app.get('/roulette/players', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -205,7 +217,7 @@ app.get('/roulette/players', (req, res) => {
   res.json({ players: roulettePlayers });
 });
 
-// === Endpoint → игрок присоединяется (POST /roulette/join) ===
+// Игрок присоединяется к спину
 app.post('/roulette/join', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -226,7 +238,7 @@ app.post('/roulette/join', (req, res) => {
   // Снимаем баланс
   updateUserBalance(username, user.balance - bet);
 
-  // Если уже есть такой игрок — просто добавляем к его ставке
+  // Если ни разу не было ставок от этого игрока — добавляем новый объект
   const existing = roulettePlayers.find(p => p.username === username);
   if (existing) {
     existing.bet += bet;
@@ -234,7 +246,8 @@ app.post('/roulette/join', (req, res) => {
     roulettePlayers.push({ username, bet, color: getRandomColor() });
   }
 
-  // Если после добавления стало ровно 2 игрока, запускаем «динамический» таймер
+  // Если после добавления стало ровно 2 игрока и ещё не запланирован спин —
+  // устанавливаем nextSpin и запускаем runSpin через 20 000 мс
   if (roulettePlayers.length === 2 && nextSpin === null) {
     nextSpin = Date.now() + spinInterval;
     spinTimeoutId = setTimeout(runSpin, spinInterval);
@@ -243,16 +256,16 @@ app.post('/roulette/join', (req, res) => {
   res.json({ players: roulettePlayers });
 });
 
-// === Endpoint → следующая метка времени спина ===
+// Следующая метка времени для спина
 app.get('/roulette/next-spin', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  // Если nextSpin === null, значит спин ещё не запланирован (менее 2 игроков)
+  // Если nextSpin === null, вернётся null (значит ждём второго игрока)
   res.json({ nextSpin });
 });
 
-// === Endpoint → последний результат спина ===
+// Последний результат спина (содержит winner, totalBet, timestamp и массив игроков)
 app.get('/roulette/result', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -262,7 +275,6 @@ app.get('/roulette/result', (req, res) => {
   }
   res.json(lastSpinResult);
 });
-
 // === Crash-игра (без изменений) ===
 const activeCrashGames = {};
 function generateCrashPoint() {
