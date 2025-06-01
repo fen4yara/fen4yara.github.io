@@ -21,17 +21,16 @@ app.use(express.json());
 // Статика: отдаём HTML/CSS/JS прямо из корня проекта
 app.use(express.static(path.join(__dirname)));
 
-app.use(session({
-  secret: 'your-secret-key-123',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: false,    // на PaaS по HTTPS можно поставить true, но в Railway/Linode автоматически HTTPS
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://fen4yaragithubio-production-9286.up.railway.app");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
   }
-}));
+  next();
+});
+
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
 
