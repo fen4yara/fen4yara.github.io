@@ -142,32 +142,49 @@ function renderLegend(list) {
   });
 }
 
+
 async function fetchPlayersAndDraw() {
   try {
     const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
     if (!resp.ok) throw new Error('Не удалось получить игроков');
     const data = await resp.json();
     players = data.players;
-    if (!isAnimating) drawWheelByList(players);
 
-    // Запускать таймер и спин только если игроков >= 2
-    if (players.length >= 2) {
-      if (!nextSpinTimestamp) {
-        // Если таймер ещё не был запущен, запросим время следующего спина и стартуем
-        await fetchNextSpin();
-      }
-      // Если таймер уже запущен, ничего не делаем - он уже идёт
-    } else {
-      // Если игроков меньше 2 - отменяем таймер (если он идёт)
+    if (players.length < 2) {
+      showMessage('Ждём минимум 2 игрока для запуска спина', 'orange');
       timerEl.textContent = '—';
-      nextSpinTimestamp = null;
-      showMessage('Ждём минимум 2 игроков для начала спина', 'orange');
+      return;
+    } else {
+      showMessage('');
     }
 
+    if (!isAnimating) drawWheelByList(players);
   } catch (err) {
     console.error('fetchPlayersAndDraw:', err);
   }
 }
+
+function startCountdown() {
+  if (!nextSpinTimestamp) {
+    timerEl.textContent = '—';
+    return;
+  }
+  function updateTimer() {
+    const now = Date.now();
+    let diff = Math.floor((nextSpinTimestamp - now) / 1000);
+    if (diff < 0) diff = 0;
+    timerEl.textContent = diff;
+  }
+  updateTimer();
+  const intervalId = setInterval(() => {
+    updateTimer();
+    if (Date.now() >= nextSpinTimestamp) {
+      clearInterval(intervalId);
+      scheduleSpinAnimation();
+    }
+  }, 500);
+}
+
 
 
 async function fetchNextSpin() {
