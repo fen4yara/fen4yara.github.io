@@ -1,428 +1,345 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>🎡 Рулетка</title>
-<link rel="stylesheet" href="style.css" />
-<style>
-  .wheel {
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    border: 10px solid #333;
-    margin: 20px auto;
-    position: relative;
-    overflow: hidden;
-  }
-  .wheel canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .pointer {
-    position: absolute;
-    top: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 20px solid transparent;
-    border-right: 20px solid transparent;
-    border-bottom: 30px solid red;
-  }
-  #message {
-    font-weight: bold;
-    margin-top: 10px;
-    color: #333;
-    text-align: center;
-  }
-  #countdown {
-    font-size: 1rem;
-    color: #555;
-    text-align: center;
-    margin-top: 5px;
-  }
-  #legend {
-    max-width: 300px;
-    margin: 10px auto;
-    font-size: 0.9rem;
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 4px;
-  }
-  .legend-color {
-    width: 16px;
-    height: 16px;
-    border: 1px solid #000;
-    margin-right: 8px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎡 Рулетка</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .wheel {
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      border: 10px solid #333;
+      margin: 20px auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .wheel canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pointer {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 30px solid red;
+    }
+    #message {
+      font-weight: bold;
+      margin-top: 10px;
+      color: #333;
+      text-align: center;
+    }
+    #countdown {
+      font-size: 1rem;
+      color: #555;
+      text-align: center;
+      margin-top: 5px;
+    }
+    #legend {
+      max-width: 300px;
+      margin: 10px auto;
+      font-size: 0.9rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border: 1px solid #000;
+      margin-right: 8px;
+    }
+  </style>
 </head>
 <body>
-<main>
-<h1>🎡 Рулетка</h1>
-<p>Баланс: <span id="balance">...</span> 🍬</p>
+  <main>
+    <h1>🎡 Рулетка</h1>
+    <p>Баланс: <span id="balance">...</span> 🍬</p>
 
-<div>
-  <label for="bet">Ставка:</label>
-  <input type="number" id="bet" min="1" placeholder="Введите ставку" />
-  <button id="joinBtn">Присоединиться</button>
-</div>
-<div id="countdown">До следующего спина: <span id="timer">—</span> сек</div>
+    <div>
+      <label for="bet">Ставка:</label>
+      <input type="number" id="bet" min="1" placeholder="Введите ставку" />
+      <button id="joinBtn">Присоединиться</button>
+    </div>
+    <div id="countdown">До следующего спина: <span id="timer">—</span> сек</div>
 
-<div class="wheel">
-  <canvas id="canvas" width="300" height="300"></canvas>
-  <div class="pointer"></div>
-</div>
+    <div class="wheel">
+      <canvas id="canvas" width="300" height="300"></canvas>
+      <div class="pointer"></div>
+    </div>
 
-<div id="legend"></div>
-<p id="message"></p>
-<button onclick="window.location.href='mainPage.html'">⬅️ Назад</button>
-</main>
+    <!-- Легенда: какой игрок какого цвета -->
+    <div id="legend"></div>
 
-<script>
-const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
+    <p id="message"></p>
+    <button onclick="window.location.href='mainPage.html'">⬅️ Назад</button>
+  </main>
 
-let user = null;
-let players = [];
-let spinPlayers = [];
-let isAnimating = false;
-let nextSpinTimestamp = null;
+  <script>
+    const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
 
-const balanceEl = document.getElementById('balance');
-const messageEl = document.getElementById('message');
-const joinBtn = document.getElementById('joinBtn');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const timerEl = document.getElementById('timer');
-const legendEl = document.getElementById('legend');
+    let user = null;
+    let players = [];           // Текущий список игроков (уникальные username, aggregated bet, color)
+    let spinPlayers = [];       // Снимок очереди на момент начала анимации
+    let isAnimating = false;    // Флаг, когда идёт анимация
+    let nextSpinTimestamp = null;
 
-function easeOut(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
+    const balanceEl = document.getElementById('balance');
+    const messageEl = document.getElementById('message');
+    const joinBtn = document.getElementById('joinBtn');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const timerEl = document.getElementById('timer');
+    const legendEl = document.getElementById('legend');
 
-function showMessage(msg, color = '#333') {
-  messageEl.textContent = msg;
-  messageEl.style.color = color;
-}
-
-function drawWheelByList(list) {
-  ctx.clearRect(0, 0, 300, 300);
-  if (list.length === 0) return;
-  const totalBet = list.reduce((s, p) => s + p.bet, 0);
-  let startAngle = 0;
-  list.forEach(p => {
-    const angle = (p.bet / totalBet) * 2 * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(150, 150);
-    ctx.arc(150, 150, 150, startAngle, startAngle + angle);
-    ctx.fillStyle = p.color;
-    ctx.fill();
-    startAngle += angle;
-  });
-  renderLegend(list);
-}
-
-function renderLegend(list) {
-  legendEl.innerHTML = '';
-  list.forEach(p => {
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    const colorBox = document.createElement('div');
-    colorBox.className = 'legend-color';
-    colorBox.style.backgroundColor = p.color;
-    const text = document.createElement('div');
-    text.textContent = `${p.username}: ${p.bet} 🍬`;
-    item.appendChild(colorBox);
-    item.appendChild(text);
-    legendEl.appendChild(item);
-  });
-}
-
-
-async function fetchPlayersAndDraw() {
-  try {
-    const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
-    if (!resp.ok) throw new Error('Не удалось получить игроков');
-    const data = await resp.json();
-    players = data.players;
-
-    if (players.length < 2) {
-      showMessage('Ждём минимум 2 игрока для запуска спина', 'orange');
-      timerEl.textContent = '—';
-      return;
-    } else {
-      showMessage('');
+    // Easing для анимации
+    function easeOut(t) {
+      return 1 - Math.pow(1 - t, 3);
     }
 
-    if (!isAnimating) drawWheelByList(players);
-  } catch (err) {
-    console.error('fetchPlayersAndDraw:', err);
-  }
-}
-
-function startCountdown() {
-  if (!nextSpinTimestamp) {
-    timerEl.textContent = '—';
-    return;
-  }
-  function updateTimer() {
-    const now = Date.now();
-    let diff = Math.floor((nextSpinTimestamp - now) / 1000);
-    if (diff < 0) diff = 0;
-    timerEl.textContent = diff;
-  }
-  updateTimer();
-  const intervalId = setInterval(() => {
-    updateTimer();
-    if (Date.now() >= nextSpinTimestamp) {
-      clearInterval(intervalId);
-      scheduleSpinAnimation();
+    function showMessage(msg, color = '#333') {
+      messageEl.textContent = msg;
+      messageEl.style.color = color;
     }
-  }, 500);
-}
 
-
-
-async function fetchNextSpin() {
-  try {
-    const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
-    if (!resp.ok) throw new Error('Не удалось получить next-spin');
-    const data = await resp.json();
-    nextSpinTimestamp = data.nextSpin;
-    startCountdown();
-  } catch (err) {
-    console.error('fetchNextSpin:', err);
-  }
-}
-
-function scheduleSpinAnimation() {
-  if (isAnimating || nextSpinTimestamp === null) return;
-  const now = Date.now();
-  const delay = nextSpinTimestamp - now;
-  if (delay <= 0) {
-    animateSpin();
-  } else {
-    setTimeout(animateSpin, delay);
-  }
-}
-
-function animateSpin() {
-  if (isAnimating) return;
-
-  spinPlayers = players.slice();
-
-  if (spinPlayers.length < 2) {
-    showMessage('Недостаточно игроков для спина.', 'orange');
-    isAnimating = false;
-    fetchNextSpin();
-    return;
-  }
-
-  isAnimating = true;
-  showMessage('Крутим...');
-
-  // 1. Получаем победителя с сервера (запрос заранее не делаем, а в конце анимации)
-  // Пока прокручиваем колесо с анимацией
-
-  let angleOffset = 0;  // Чтобы аккумулировать полный поворот
-
-  const spinTime = 4000;  // Длительность анимации, можно увеличить
-
-  const startTime = performance.now();
-
-  // Функция для поиска угла начала сектора победителя
-  function getWinnerAngle(winnerName) {
-    const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0);
-    let startAngle = 0;
-    for (const p of spinPlayers) {
-      const angle = (p.bet / totalBet) * 2 * Math.PI;
-      if (p.username === winnerName) {
-        // Возвращаем середину сектора, чтобы стрелка указывала по центру сектора
-        return startAngle + angle / 2;
-      }
-      startAngle += angle;
-    }
-    return 0; // На всякий случай
-  }
-
-  function frame(now) {
-    const progress = now - startTime;
-    const frac = Math.min(progress / spinTime, 1);
-
-    // easeOut для плавности
-    const easedFrac = easeOut(frac);
-
-    // Пока не знаем победителя, вращаем колесо просто на несколько оборотов
-    let rotate;
-
-    if (frac < 1) {
-      rotate = easedFrac * 10 * Math.PI;  // 5 оборотов (10 PI = 5 кругов)
-      ctx.save();
+    // 1) Отрисовать колесо по переданному списку list
+    function drawWheelByList(list) {
       ctx.clearRect(0, 0, 300, 300);
-      ctx.translate(150, 150);
-      ctx.rotate(rotate + angleOffset);
-      ctx.translate(-150, -150);
-      drawWheelByList(spinPlayers);
-      ctx.restore();
-      requestAnimationFrame(frame);
-    } else {
-      // Анимация закончилась — запрашиваем победителя с сервера
-      fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' })
-        .then(r => {
-          if (!r.ok) throw new Error('Нет результата');
-          return r.json();
-        })
-        .then(resData => {
-          const winnerName = resData.winner;
-          const totalPool = spinPlayers.reduce((s, p) => s + p.bet, 0);
-          const commission = Math.floor(totalPool * 0.08);
-          const winnings = totalPool - commission;
+      if (list.length === 0) return;
+      const totalBet = list.reduce((s, p) => s + p.bet, 0);
+      let startAngle = 0;
+      list.forEach(p => {
+        const angle = (p.bet / totalBet) * 2 * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(150, 150);
+        ctx.arc(150, 150, 150, startAngle, startAngle + angle);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        startAngle += angle;
+      });
+      // После отрисовки колеса – вызов легенды
+      renderLegend(list);
+    }
 
-          // Теперь плавно докрутить колесо до сектора победителя
-          const winnerAngle = getWinnerAngle(winnerName);
+    // 2) Рисуем легенду: для каждого p в list показываем цвет и имя
+    function renderLegend(list) {
+      legendEl.innerHTML = ''; // очищаем
+      list.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        const colorBox = document.createElement('div');
+        colorBox.className = 'legend-color';
+        colorBox.style.backgroundColor = p.color;
+        const text = document.createElement('div');
+        text.textContent = `${p.username}: ${p.bet} 🍬`;
+        item.appendChild(colorBox);
+        item.appendChild(text);
+        legendEl.appendChild(item);
+      });
+    }
 
-          // Рассчитаем нужный угол вращения (который ставит победителя под стрелку)
-          // Стрелка у нас сверху (на 12 часов), а 0 угла в canvas — на 3 часа (право),
-          // так что скорректируем:
-          const pointerAngle = -Math.PI / 2;  // стрелка на 12 часов — -90 градусов
+    // 3) Запрашиваем список игроков и перерисовываем, если нет анимации
+    async function fetchPlayersAndDraw() {
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
+        if (!resp.ok) {
+          if (resp.status === 401) throw new Error('Не авторизован');
+          else throw new Error('Не удалось получить игроков');
+        }
+        const data = await resp.json();
+        players = data.players;
+        if (!isAnimating) {
+          drawWheelByList(players);
+        }
+      } catch (err) {
+        console.error('fetchPlayersAndDraw:', err);
+      }
+    }
 
-          // Нужно повернуть колесо так, чтобы сектор победителя оказался под стрелкой:
-          // То есть колесо повернуто на: pointerAngle - winnerAngle (обернём в 0..2pi)
-          let finalRotation = (pointerAngle - winnerAngle) + 2 * Math.PI * 5; // 5 оборотов сверху
+    // 4) Запрашиваем у сервера nextSpin
+    async function fetchNextSpin() {
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось получить next-spin');
+        const data = await resp.json();
+        nextSpinTimestamp = data.nextSpin;
+        startCountdown();
+      } catch (err) {
+        console.error('fetchNextSpin:', err);
+      }
+    }
 
-          let animStart = performance.now();
+    // 5) Планируем анимацию на момент nextSpinTimestamp
+    function scheduleSpinAnimation() {
+      if (isAnimating || nextSpinTimestamp === null) return;
+      const now = Date.now();
+      const delay = nextSpinTimestamp - now;
+      if (delay <= 0) {
+        // Уже пора крутить
+        animateSpin();
+      } else {
+        setTimeout(animateSpin, delay);
+      }
+    }
 
-          function finalFrame(time) {
-            const elapsed = time - animStart;
-            const duration = 2000; // 2 секунды для докрутки
+    // 6) Анимация спина и получение результата
+    function animateSpin() {
+      if (isAnimating) return;
 
-            const t = Math.min(elapsed / duration, 1);
-            const easedT = easeOut(t);
+      // Сохраняем «снимок» очереди: копию players
+      spinPlayers = players.slice();
 
-            const currentRotation = rotate + easedT * (finalRotation - rotate);
+      // Если менее 2 игроков – не анимируем, просто синхронизируем новый next-spin
+      if (spinPlayers.length < 2) {
+        showMessage('Недостаточно игроков для спина.', 'orange');
+        isAnimating = false;
+        fetchNextSpin();
+        return;
+      }
 
-            ctx.save();
-            ctx.clearRect(0, 0, 300, 300);
-            ctx.translate(150, 150);
-            ctx.rotate(currentRotation + angleOffset);
-            ctx.translate(-150, -150);
-            drawWheelByList(spinPlayers);
-            ctx.restore();
+      isAnimating = true;
+      showMessage('Крутим...');
 
-            if (t < 1) {
-              requestAnimationFrame(finalFrame);
-            } else {
-              // Анимация завершена, показываем сообщение
-              showMessage(`🎉 Победитель: ${winnerName}! Выигрыш: ${winnings} 🍬 (8% комиссия: ${commission} 🍬)`, 'green');
+      let angleOffset = 0;
+      const spinTime = 3000;
+      const startTime = performance.now();
 
-              // Обновим баланс пользователя
+      function frame(now) {
+        const progress = now - startTime;
+        const frac = Math.min(progress / spinTime, 1);
+        const rotate = easeOut(frac) * 10 * Math.PI;
+
+        ctx.save();
+        ctx.clearRect(0, 0, 300, 300);
+        ctx.translate(150, 150);
+        ctx.rotate(rotate + angleOffset);
+        ctx.translate(-150, -150);
+        drawWheelByList(spinPlayers);
+        ctx.restore();
+
+        if (progress < spinTime) {
+          requestAnimationFrame(frame);
+        } else {
+          angleOffset += rotate;
+          // Анимация закончилась – запросим результат
+          fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' })
+            .then(r => {
+              if (!r.ok) throw new Error('Нет результата');
+              return r.json();
+            })
+            .then(resData => {
+              showMessage(`🎉 Победитель: ${resData.winner}!`, 'green');
+              // Обновляем баланс
               return fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-            }
-          }
+            })
+            .then(r2 => {
+              if (r2.ok) return r2.json();
+              throw new Error('Не удалось обновить баланс');
+            })
+            .then(userData => {
+              user.balance = userData.balance;
+              balanceEl.textContent = user.balance;
+            })
+            .catch(err => {
+              console.error(err);
+            })
+            .finally(() => {
+              // После всего: оставляем на экране «спиновое» состояние (spinPlayers),
+              // очищаем глобальный players, но не трогаем spinPlayers, чтобы колесо осталось видимым.
+              players = [];
+              isAnimating = false;
+              // Синхронизируем новый next-spin
+              fetchNextSpin();
+            });
+        }
+      }
 
-          requestAnimationFrame(finalFrame);
-
-          return null; // дальше в цепочке промисов не идем здесь
-        })
-        .then(userResp => {
-          if (!userResp) return;
-          if (userResp.ok) return userResp.json();
-          throw new Error('Не удалось обновить баланс');
-        })
-        .then(userData => {
-          if (!userData) return;
-          user.balance = userData.balance;
-          balanceEl.textContent = user.balance;
-        })
-        .catch(err => {
-          console.error(err);
-          showMessage('Ошибка при отображении результата', 'red');
-        })
-        .finally(() => {
-          players = [];
-          isAnimating = false;
-          fetchNextSpin();
-        });
+      requestAnimationFrame(frame);
     }
-  }
 
-  requestAnimationFrame(frame);
-}
-
-
-
-function startCountdown() {
-  function updateTimer() {
-    const now = Date.now();
-    let diff = Math.floor((nextSpinTimestamp - now) / 1000);
-    if (diff < 0) diff = 0;
-    timerEl.textContent = diff;
-  }
-  updateTimer();
-  const intervalId = setInterval(() => {
-    updateTimer();
-    if (Date.now() >= nextSpinTimestamp) {
-      clearInterval(intervalId);
-      scheduleSpinAnimation();
+    // 7) Обратный отсчёт до nextSpinTimestamp
+    function startCountdown() {
+      function updateTimer() {
+        const now = Date.now();
+        let diff = Math.floor((nextSpinTimestamp - now) / 1000);
+        if (diff < 0) diff = 0;
+        timerEl.textContent = diff;
+      }
+      updateTimer();
+      const intervalId = setInterval(() => {
+        updateTimer();
+        if (Date.now() >= nextSpinTimestamp) {
+          clearInterval(intervalId);
+          scheduleSpinAnimation();
+        }
+      }, 500);
     }
-  }, 500);
-}
 
-window.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-    if (!resp.ok) throw new Error('Не авторизован');
-    user = await resp.json();
-    balanceEl.textContent = user.balance;
+    // 8) При загрузке страницы:
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не авторизован');
+        user = await resp.json();
+        balanceEl.textContent = user.balance;
 
-    await fetchPlayersAndDraw();
-    setInterval(fetchPlayersAndDraw, 2000);
-    await fetchNextSpin();
-  } catch (err) {
-    alert('Пожалуйста, сначала войдите.');
-    window.location.href = 'index.html';
-  }
-});
-
-joinBtn.addEventListener('click', async () => {
-  const betValue = parseInt(document.getElementById('bet').value);
-  if (!betValue || betValue <= 0) {
-    showMessage('Некорректная ставка!', 'red');
-    return;
-  }
-  if (betValue > user.balance) {
-    showMessage('Недостаточно средств!', 'red');
-    return;
-  }
-  try {
-    const resp = await fetch(`${BASE_URL}/roulette/join`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ bet: betValue })
+        await fetchPlayersAndDraw();
+        setInterval(fetchPlayersAndDraw, 2000);
+        await fetchNextSpin();
+      } catch (err) {
+        alert('Пожалуйста, сначала войдите.');
+        window.location.href = 'index.html';
+      }
     });
-    const data = await resp.json();
-    if (!resp.ok) {
-      throw new Error(data.error || 'Ошибка при join');
-    }
-    players = data.players;
-    drawWheelByList(players);
 
-    const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-    if (check.ok) {
-      const upd = await check.json();
-      user.balance = upd.balance;
-      balanceEl.textContent = user.balance;
-    }
-    showMessage('Вы в игре. Ждём спина...', '#333');
-  } catch (err) {
-    showMessage(err.message, 'red');
-  }
-});
-</script>
+    // 9) Нажатие «Присоединиться»
+    joinBtn.addEventListener('click', async () => {
+      const betValue = parseInt(document.getElementById('bet').value);
+      if (!betValue || betValue <= 0) {
+        showMessage('Некорректная ставка!', 'red');
+        return;
+      }
+      if (betValue > user.balance) {
+        showMessage('Недостаточно средств!', 'red');
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ bet: betValue })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка при join');
+        }
+        // Обновляем players и колесо
+        players = data.players;
+        drawWheelByList(players);
+
+        // Обновляем баланс
+        const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (check.ok) {
+          const upd = await check.json();
+          user.balance = upd.balance;
+          balanceEl.textContent = user.balance;
+        }
+        showMessage('Вы в игре. Ждём спина...', '#333');
+      } catch (err) {
+        showMessage(err.message, 'red');
+      }
+    });
+  </script>
 </body>
 </html>
