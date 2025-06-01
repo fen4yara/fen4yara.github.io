@@ -70,7 +70,7 @@ app.post('/register', (req, res) => {
     if (all.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
-    all.push({ username, balance: 100, ip: userIP });
+    all.push({ username, balance: 1000, ip: userIP });
     writeUsers(all);
     res.json({ message: 'Регистрация успешна!' });
   } catch (err) {
