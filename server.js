@@ -15,7 +15,7 @@ const corsOptions = {
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 };
-app.use(cors(corsOptions));
+
 
 app.use(express.json());
 // Статика: отдаём HTML/CSS/JS прямо из корня проекта
@@ -30,7 +30,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
 
