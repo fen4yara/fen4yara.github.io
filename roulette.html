@@ -192,85 +192,134 @@ function animateSpin() {
   isAnimating = true;
   showMessage('Крутим...');
 
-  // Сначала получаем результат (победителя) ДО анимации
-  fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' })
-    .then(r => {
-      if (!r.ok) throw new Error('Нет результата');
-      return r.json();
-    })
-    .then(resData => {
-      const winnerName = resData.winner;
-      const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0);
+  // 1. Получаем победителя с сервера (запрос заранее не делаем, а в конце анимации)
+  // Пока прокручиваем колесо с анимацией
 
-      // Найдём сектор победителя
-      let startAngle = 0;
-      let winnerAngleStart = 0;
-      let winnerAngleEnd = 0;
-      for (const p of spinPlayers) {
-        const angle = (p.bet / totalBet) * 2 * Math.PI;
-        if (p.username === winnerName) {
-          winnerAngleStart = startAngle;
-          winnerAngleEnd = startAngle + angle;
-          break;
-        }
-        startAngle += angle;
+  let angleOffset = 0;  // Чтобы аккумулировать полный поворот
+
+  const spinTime = 4000;  // Длительность анимации, можно увеличить
+
+  const startTime = performance.now();
+
+  // Функция для поиска угла начала сектора победителя
+  function getWinnerAngle(winnerName) {
+    const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0);
+    let startAngle = 0;
+    for (const p of spinPlayers) {
+      const angle = (p.bet / totalBet) * 2 * Math.PI;
+      if (p.username === winnerName) {
+        // Возвращаем середину сектора, чтобы стрелка указывала по центру сектора
+        return startAngle + angle / 2;
       }
+      startAngle += angle;
+    }
+    return 0; // На всякий случай
+  }
 
-      // Вычисляем случайный угол внутри сектора победителя
-      const winnerAngleCenter = (winnerAngleStart + winnerAngleEnd) / 2;
+  function frame(now) {
+    const progress = now - startTime;
+    const frac = Math.min(progress / spinTime, 1);
 
-      // Сколько полных оборотов сделаем (например, 5)
-      const fullSpins = 5;
-      const finalAngle = fullSpins * 2 * Math.PI + (Math.PI / 2 - winnerAngleCenter);
+    // easeOut для плавности
+    const easedFrac = easeOut(frac);
 
-      // Анимация: от 0 до finalAngle
-      const spinTime = 3000;
-      const startTime = performance.now();
+    // Пока не знаем победителя, вращаем колесо просто на несколько оборотов
+    let rotate;
 
-      function frame(now) {
-        const progress = now - startTime;
-        const frac = Math.min(progress / spinTime, 1);
-        const angle = easeOut(frac) * finalAngle;
-
-        ctx.save();
-        ctx.clearRect(0, 0, 300, 300);
-        ctx.translate(150, 150);
-        ctx.rotate(angle);
-        ctx.translate(-150, -150);
-        drawWheelByList(spinPlayers);
-        ctx.restore();
-
-        if (progress < spinTime) {
-          requestAnimationFrame(frame);
-        } else {
-          const commission = Math.floor(totalBet * 0.08);
-          const winnings = totalBet - commission;
-          showMessage(`🎉 Победитель: ${winnerName}! Выигрыш: ${winnings} 🍬 (8% комиссия: ${commission} 🍬)`, 'green');
-
-          // Обновляем баланс
-          return fetch(`${BASE_URL}/check-auth`, { credentials: 'include' })
-            .then(r2 => r2.ok ? r2.json() : Promise.reject('Не удалось обновить баланс'))
-            .then(userData => {
-              user.balance = userData.balance;
-              balanceEl.textContent = user.balance;
-            })
-            .finally(() => {
-              players = [];
-              isAnimating = false;
-              fetchNextSpin();
-            });
-        }
-      }
-
+    if (frac < 1) {
+      rotate = easedFrac * 10 * Math.PI;  // 5 оборотов (10 PI = 5 кругов)
+      ctx.save();
+      ctx.clearRect(0, 0, 300, 300);
+      ctx.translate(150, 150);
+      ctx.rotate(rotate + angleOffset);
+      ctx.translate(-150, -150);
+      drawWheelByList(spinPlayers);
+      ctx.restore();
       requestAnimationFrame(frame);
-    })
-    .catch(err => {
-      console.error(err);
-      showMessage('Ошибка получения победителя!', 'red');
-      isAnimating = false;
-      fetchNextSpin();
-    });
+    } else {
+      // Анимация закончилась — запрашиваем победителя с сервера
+      fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' })
+        .then(r => {
+          if (!r.ok) throw new Error('Нет результата');
+          return r.json();
+        })
+        .then(resData => {
+          const winnerName = resData.winner;
+          const totalPool = spinPlayers.reduce((s, p) => s + p.bet, 0);
+          const commission = Math.floor(totalPool * 0.08);
+          const winnings = totalPool - commission;
+
+          // Теперь плавно докрутить колесо до сектора победителя
+          const winnerAngle = getWinnerAngle(winnerName);
+
+          // Рассчитаем нужный угол вращения (который ставит победителя под стрелку)
+          // Стрелка у нас сверху (на 12 часов), а 0 угла в canvas — на 3 часа (право),
+          // так что скорректируем:
+          const pointerAngle = -Math.PI / 2;  // стрелка на 12 часов — -90 градусов
+
+          // Нужно повернуть колесо так, чтобы сектор победителя оказался под стрелкой:
+          // То есть колесо повернуто на: pointerAngle - winnerAngle (обернём в 0..2pi)
+          let finalRotation = (pointerAngle - winnerAngle) + 2 * Math.PI * 5; // 5 оборотов сверху
+
+          let animStart = performance.now();
+
+          function finalFrame(time) {
+            const elapsed = time - animStart;
+            const duration = 2000; // 2 секунды для докрутки
+
+            const t = Math.min(elapsed / duration, 1);
+            const easedT = easeOut(t);
+
+            const currentRotation = rotate + easedT * (finalRotation - rotate);
+
+            ctx.save();
+            ctx.clearRect(0, 0, 300, 300);
+            ctx.translate(150, 150);
+            ctx.rotate(currentRotation + angleOffset);
+            ctx.translate(-150, -150);
+            drawWheelByList(spinPlayers);
+            ctx.restore();
+
+            if (t < 1) {
+              requestAnimationFrame(finalFrame);
+            } else {
+              // Анимация завершена, показываем сообщение
+              showMessage(`🎉 Победитель: ${winnerName}! Выигрыш: ${winnings} 🍬 (8% комиссия: ${commission} 🍬)`, 'green');
+
+              // Обновим баланс пользователя
+              return fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+            }
+          }
+
+          requestAnimationFrame(finalFrame);
+
+          return null; // дальше в цепочке промисов не идем здесь
+        })
+        .then(userResp => {
+          if (!userResp) return;
+          if (userResp.ok) return userResp.json();
+          throw new Error('Не удалось обновить баланс');
+        })
+        .then(userData => {
+          if (!userData) return;
+          user.balance = userData.balance;
+          balanceEl.textContent = user.balance;
+        })
+        .catch(err => {
+          console.error(err);
+          showMessage('Ошибка при отображении результата', 'red');
+        })
+        .finally(() => {
+          players = [];
+          isAnimating = false;
+          fetchNextSpin();
+        });
+    }
+  }
+
+  requestAnimationFrame(frame);
 }
+
 
 
 function startCountdown() {
