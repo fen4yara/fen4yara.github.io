@@ -143,24 +143,15 @@ app.post('/logout', (req, res) => {
 
 
 
-let currentPlayers = [];
-let spinTimeout = null;
-let nextSpinTime = null; // timestamp следующего спина
+let roulettePlayers = [];  
+// Формат: [{ username, bet, color }]
 
-const SPIN_DELAY = 15000; // 15 секунд после достижения 2 игроков
+let lastSpinResult = null;  
+// Формат: { winner: String, totalBet: Number, timestamp: Number }
 
-function startSpinTimer() {
-  if (spinTimeout) clearTimeout(spinTimeout);
-
-  nextSpinTime = Date.now() + SPIN_DELAY;
-  spinTimeout = setTimeout(() => {
-    // Запускаем спин, выбираем победителя и т.д.
-    doSpin();
-    currentPlayers = [];
-    nextSpinTime = null;
-    spinTimeout = null;
-  }, SPIN_DELAY);
-}
+const spinInterval = 20000; // 20 сек
+// Вычислим первый nextSpin: ближайшая «многократная» 20 000 мс
+let nextSpin = Date.now() + spinInterval - (Date.now() % spinInterval);
 
 // Вспомогательная функция для случайного цвета
 function getRandomColor() {
@@ -201,11 +192,9 @@ function runSpin() {
 
     // Обновляем баланс победителя
     const winUser = findUser(winner.username);
-   if (winUser) {
-  const newBalance = Math.round(winUser.balance + totalBet - 0.08 * totalBet);
-  updateUserBalance(winner.username, newBalance);
-}
-
+    if (winUser) {
+      updateUserBalance(winner.username, winUser.balance + totalBet);
+    }
 
     lastSpinResult = {
       winner: winner.username,
@@ -263,27 +252,15 @@ app.post('/roulette/join', (req, res) => {
     roulettePlayers.push({ username, bet, color: getRandomColor() });
   }
 
-  if (currentPlayers.length >= 2) {
-    if (!spinTimeout) startSpinTimer();
-  } else {
-    // Меньше 2 игроков — сбрасываем таймер
-    if (spinTimeout) {
-      clearTimeout(spinTimeout);
-      spinTimeout = null;
-      nextSpinTime = null;
-    }
-  }
-
   res.json({ players: roulettePlayers });
 });
-
 
 // === Endpoint → следующая метка времени спина
 app.get('/roulette/next-spin', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  res.json({ nextSpin: nextSpinTime || 0 });
+  res.json({ nextSpin });
 });
 
 // === Endpoint → последний результат спина (если уже был)
