@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Регистрация</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -17,20 +17,32 @@
   </main>
 
   <script>
-    document.getElementById('registerForm').addEventListener('submit', (e) => {
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('regUsername').value.trim();
       if (!username) return alert('Введите имя!');
 
-      // Для простоты, начнем с 100 конфеток
-      const user = {
-        username,
-        balance: 100
-      };
+      try {
+        const response = await fetch('http://localhost:3000/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username }),
+          mode: 'cors'  // Явно включаем CORS
+        });
 
-      localStorage.setItem('user', JSON.stringify(user));
-      alert('Регистрация успешна!');
-      window.location.href = 'index.html'; // переход на главную
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Ошибка регистрации');
+        }
+
+        alert(data.message);
+        window.location.href = 'index.html';
+      } catch (err) {
+        alert('Ошибка: ' + err.message);
+      }
     });
   </script>
 </body>

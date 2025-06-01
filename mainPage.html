@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Главная</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main>
     <h1>Добро пожаловать, <span id="username"></span>!</h1>
     <p>Ваши конфетки: <span id="balance"></span></p>
 
-    <h2>Выберите режим игры:</h2>
     <div class="game-modes">
       <button onclick="window.location.href='crash.html'">🚀 Краш</button>
       <button onclick="window.location.href='roulette.html'">🎯 Рулетка</button>
@@ -21,21 +20,49 @@
   </main>
 
   <script>
-    // Проверка входа
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (!user) {
-      alert('Пожалуйста, войдите!');
-      window.location.href = 'login.html';
-    } else {
-      document.getElementById('username').textContent = user.username;
-      document.getElementById('balance').textContent = user.balance;
+    // Проверка авторизации при загрузке страницы
+// Проверка авторизации при загрузке страницы
+async function checkAuth() {
+  try {
+    const response = await fetch('http://localhost:3000/check-auth', {
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Требуется авторизация');
     }
 
-    // Выход
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      localStorage.removeItem('user');
-      window.location.href = 'login.html';
+    const user = await response.json();
+    document.getElementById('username').textContent = user.username;
+    document.getElementById('balance').textContent = user.balance;
+  } catch (err) {
+    console.error('Auth error:', err);
+    alert('Ошибка авторизации: ' + err.message);
+    window.location.href = 'index.html';
+  }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try {
+    const response = await fetch('http://localhost:3000/logout', {
+      method: 'POST',
+      credentials: 'include'
     });
-  </script>
+    
+    if (response.ok) {
+      window.location.href = 'index.html';
+    } else {
+      throw new Error('Не удалось выйти');
+    }
+  } catch (err) {
+    console.error('Logout error:', err);
+    alert('Ошибка при выходе: ' + err.message);
+  }
+});
+
+// Проверяем авторизацию при загрузке
+checkAuth();
+</script>
 </body>
 </html>

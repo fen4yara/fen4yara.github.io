@@ -16,15 +16,15 @@
 <body>
   <main>
     <h1>🚀 Краш</h1>
-    <p>Баланс: <span id="balance"></span> 🍬</p>
+    <p>Баланс: <span id="balance">...</span> 🍬</p>
 
     <div class="crash-area">
       <label for="bet">Ставка:</label>
       <input type="number" id="bet" min="1" placeholder="Введите ставку" />
       <br><br>
       <p>Коэффициент: <span id="coefficient">1.00</span>x</p>
-      <button id="startBtn" onclick="startGame()">Начать</button>
-      <button id="cashoutBtn" onclick="cashOut()" disabled>Забрать</button>
+      <button id="startBtn">Начать</button>
+      <button id="cashoutBtn" disabled>Забрать</button>
       <p id="message"></p>
     </div>
 
@@ -32,95 +32,145 @@
   </main>
 
   <script>
-    let user = JSON.parse(localStorage.getItem('user'));
-    if (!user) {
-      window.location.href = 'login.html';
-    } else {
-      document.getElementById('balance').textContent = user.balance;
-    }
-
+    let user = null;
     let coefficient = 1.0;
-    let interval;
-    let crashed = false;
     let crashPoint = 0;
     let betAmount = 0;
+    let intervalId = null;
+    let hasCashedOut = false;
 
-    function getCrashPoint() {
-      const rand = Math.random() * 100;
-      if (rand <= 50) {
-        return (Math.random() * (2 - 1) + 1).toFixed(2);
-      } else if (rand <= 65) {
-        return (Math.random() * (5 - 3) + 3).toFixed(2);
-      } else if (rand <= 80) {
-        return (Math.random() * (10 - 5) + 5).toFixed(2);
-      } else if (rand <= 95) {
-        return (Math.random() * (50 - 10) + 10).toFixed(2);
-      } else {
-        return (Math.random() * (1500 - 50) + 50).toFixed(2);
+    const balanceEl = document.getElementById('balance');
+    const coefficientEl = document.getElementById('coefficient');
+    const messageEl = document.getElementById('message');
+    const startBtn = document.getElementById('startBtn');
+    const cashoutBtn = document.getElementById('cashoutBtn');
+    const betInputEl = document.getElementById('bet');
+
+    // 1) При загрузке: проверяем сессию и показываем баланс
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const resp = await fetch('/check-auth', { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не авторизован');
+        user = await resp.json();
+        balanceEl.textContent = user.balance;
+      } catch (err) {
+        alert('Пожалуйста, сначала войдите.');
+        window.location.href = 'index.html';
       }
-    }
+    });
 
     function showMessage(msg, color = '#333') {
-      const el = document.getElementById('message');
-      el.textContent = msg;
-      el.style.color = color;
+      messageEl.textContent = msg;
+      messageEl.style.color = color;
     }
 
-    function startGame() {
-      const betInput = document.getElementById('bet').value;
-      if (!betInput || isNaN(betInput) || betInput <= 0 || betInput > user.balance) {
+    function resetGameUI() {
+      coefficient = 1.0;
+      coefficientEl.textContent = coefficient.toFixed(2);
+      startBtn.disabled = false;
+      cashoutBtn.disabled = true;
+      betInputEl.disabled = false;
+      hasCashedOut = false;
+    }
+
+    // 2) Нажали «Начать»
+    startBtn.addEventListener('click', async () => {
+      const betValue = parseInt(betInputEl.value);
+      if (!betValue || betValue <= 0) {
         showMessage('Некорректная ставка!', 'red');
         return;
       }
+      if (betValue > user.balance) {
+        showMessage('Недостаточно средств!', 'red');
+        return;
+      }
 
-      betAmount = parseInt(betInput);
-      user.balance -= betAmount;
-      localStorage.setItem('user', JSON.stringify(user));
-      document.getElementById('balance').textContent = user.balance;
-
-      coefficient = 1.0;
-      document.getElementById('coefficient').textContent = coefficient.toFixed(2);
-      document.getElementById('startBtn').disabled = true;
-      document.getElementById('cashoutBtn').disabled = false;
-      document.getElementById('bet').disabled = true;
-      showMessage('Игра началась! 🚀');
-
-      crashed = false;
-      crashPoint = parseFloat(getCrashPoint());
-
-      let speed = 0.001;
-      interval = setInterval(() => {
-        if (crashed) return;
-
-        speed += 0.0001;
-        coefficient += speed;
-        document.getElementById('coefficient').textContent = coefficient.toFixed(2);
-
-        if (coefficient >= crashPoint) {
-          clearInterval(interval);
-          crashed = true;
-          showMessage('💥 Краш! Вы проиграли.', 'red');
-          document.getElementById('startBtn').disabled = false;
-          document.getElementById('cashoutBtn').disabled = true;
-          document.getElementById('bet').disabled = false;
+      try {
+        const resp = await fetch('/crash/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ bet: betValue })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка при старте игры');
         }
-      }, 50);
-    }
 
-    function cashOut() {
-      if (crashed) return;
+        // Успешно: сервер снизил баланс, вернул crashPoint
+        crashPoint = data.crashPoint;
+        betAmount = betValue;
+        user.balance -= betAmount;
+        balanceEl.textContent = user.balance;
 
-      clearInterval(interval);
-      const winnings = Math.floor(betAmount * coefficient);
-      user.balance += winnings;
-      localStorage.setItem('user', JSON.stringify(user));
-      document.getElementById('balance').textContent = user.balance;
+        startBtn.disabled = true;
+        cashoutBtn.disabled = false;
+        betInputEl.disabled = true;
+        showMessage('Игра началась! 🚀', '#333');
 
-      showMessage(`✅ Вы забрали ${winnings} 🍬 (Коэф: ${coefficient.toFixed(2)}x)`, 'green');
-      document.getElementById('startBtn').disabled = false;
-      document.getElementById('cashoutBtn').disabled = true;
-      document.getElementById('bet').disabled = false;
-    }
+        // Запускаем анимацию коэффициента
+        coefficient = 1.0;
+        coefficientEl.textContent = coefficient.toFixed(2);
+        let speed = 0.001;
+
+        intervalId = setInterval(() => {
+          if (hasCashedOut) return;
+          speed += 0.0001;
+          coefficient += speed;
+          coefficientEl.textContent = coefficient.toFixed(2);
+
+          // Если дошли до crashPoint или превысили
+          if (coefficient >= crashPoint) {
+            clearInterval(intervalId);
+            coefficient = crashPoint;
+            coefficientEl.textContent = coefficient.toFixed(2);
+            showMessage('💥 Краш! Вы проиграли.', 'red');
+            resetGameUI();
+          }
+        }, 50);
+
+      } catch (err) {
+        showMessage(err.message, 'red');
+      }
+    });
+
+    // 3) Нажали «Забрать»
+    cashoutBtn.addEventListener('click', async () => {
+      if (hasCashedOut) return;
+      hasCashedOut = true;
+      clearInterval(intervalId);
+
+      const currentCoef = parseFloat(coefficientEl.textContent);
+      // Если пользователь уже «пробил» после перерасчёта (привести к двум знакам)
+      if (currentCoef >= crashPoint) {
+        // Уже крашнулся, просто сбросим UI
+        showMessage('💥 Краш! Вы проиграли.', 'red');
+        resetGameUI();
+        return;
+      }
+
+      // Пытаемся «забрать» 
+      try {
+        const resp = await fetch('/crash/cashout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ coefficient: currentCoef })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка при выплате');
+        }
+        // Сервер вернул { winnings, newBalance }
+        user.balance = data.newBalance;
+        balanceEl.textContent = user.balance;
+        showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${currentCoef.toFixed(2)})`, 'green');
+        resetGameUI();
+      } catch (err) {
+        showMessage(err.message, 'red');
+        resetGameUI();
+      }
+    });
   </script>
 </body>
 </html>

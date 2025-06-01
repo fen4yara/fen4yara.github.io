@@ -1,0 +1,16 @@
+{
+  "name": "fen4yara.github.io",
+  "version": "1.0.0",
+  "description": "<p align=\"center\">   <br>   <img width=\"240\" src=\"./assets/tapps.png\" alt=\"logo of telegram web apps\">   <br>   <br> </p>",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-session": "^1.18.1"
+  }
+}
