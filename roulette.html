@@ -149,10 +149,26 @@ async function fetchPlayersAndDraw() {
     const data = await resp.json();
     players = data.players;
     if (!isAnimating) drawWheelByList(players);
+
+    // Запускать таймер и спин только если игроков >= 2
+    if (players.length >= 2) {
+      if (!nextSpinTimestamp) {
+        // Если таймер ещё не был запущен, запросим время следующего спина и стартуем
+        await fetchNextSpin();
+      }
+      // Если таймер уже запущен, ничего не делаем - он уже идёт
+    } else {
+      // Если игроков меньше 2 - отменяем таймер (если он идёт)
+      timerEl.textContent = '—';
+      nextSpinTimestamp = null;
+      showMessage('Ждём минимум 2 игроков для начала спина', 'orange');
+    }
+
   } catch (err) {
     console.error('fetchPlayersAndDraw:', err);
   }
 }
+
 
 async function fetchNextSpin() {
   try {
