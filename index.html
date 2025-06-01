@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <title>320xbet</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
@@ -19,42 +19,44 @@
     </main>
 
     <script>
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = document.getElementById('loginUsername').value.trim();
-  if (!username) return alert('Введите имя!');
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
 
-  try {
-    const response = await fetch('http://localhost:3000/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ username }),
-      credentials: 'include'
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value.trim();
+      if (!username) return alert('Введите имя!');
+
+      try {
+        const response = await fetch(`${BASE_URL}/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username }),
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Ошибка входа');
+        }
+
+        const data = await response.json();
+        alert(data.message);
+        // Проверяем сессию перед редиректом
+        const sessionCheck = await fetch(`${BASE_URL}/check-auth`, {
+          credentials: 'include'
+        });
+        
+        if (sessionCheck.ok) {
+          window.location.href = 'mainPage.html';
+        } else {
+          throw new Error('Сессия не создана');
+        }
+      } catch (err) {
+        alert('Ошибка: ' + err.message);
+      }
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Ошибка входа');
-    }
-
-    const data = await response.json();
-    alert(data.message);
-    // Добавляем проверку сессии перед редиректом
-    const sessionCheck = await fetch('http://localhost:3000/check-auth', {
-      credentials: 'include'
-    });
-    
-    if (sessionCheck.ok) {
-      window.location.href = 'mainPage.html';
-    } else {
-      throw new Error('Сессия не создана');
-    }
-  } catch (err) {
-    alert('Ошибка: ' + err.message);
-  }
-});
     </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>

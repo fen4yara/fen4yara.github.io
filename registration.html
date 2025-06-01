@@ -17,19 +17,21 @@
   </main>
 
   <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('regUsername').value.trim();
       if (!username) return alert('Введите имя!');
 
       try {
-        const response = await fetch('http://localhost:3000/register', {
+        const response = await fetch(`${BASE_URL}/register`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ username }),
-          mode: 'cors'  // Явно включаем CORS
+          mode: 'cors'
         });
 
         const data = await response.json();

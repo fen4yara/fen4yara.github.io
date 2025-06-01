@@ -86,6 +86,8 @@
   </main>
 
   <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+
     let user = null;
     let players = [];           // Текущий список игроков (уникальные username, aggregated bet, color)
     let spinPlayers = [];       // Снимок очереди на момент начала анимации
@@ -149,7 +151,7 @@
     // 3) Запрашиваем список игроков и перерисовываем, если нет анимации
     async function fetchPlayersAndDraw() {
       try {
-        const resp = await fetch('/roulette/players', { credentials: 'include' });
+        const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
         if (!resp.ok) {
           if (resp.status === 401) throw new Error('Не авторизован');
           else throw new Error('Не удалось получить игроков');
@@ -167,7 +169,7 @@
     // 4) Запрашиваем у сервера nextSpin
     async function fetchNextSpin() {
       try {
-        const resp = await fetch('/roulette/next-spin', { credentials: 'include' });
+        const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не удалось получить next-spin');
         const data = await resp.json();
         nextSpinTimestamp = data.nextSpin;
@@ -230,7 +232,7 @@
         } else {
           angleOffset += rotate;
           // Анимация закончилась – запросим результат
-          fetch('/roulette/result', { credentials: 'include' })
+          fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' })
             .then(r => {
               if (!r.ok) throw new Error('Нет результата');
               return r.json();
@@ -238,7 +240,7 @@
             .then(resData => {
               showMessage(`🎉 Победитель: ${resData.winner}!`, 'green');
               // Обновляем баланс
-              return fetch('/check-auth', { credentials: 'include' });
+              return fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
             })
             .then(r2 => {
               if (r2.ok) return r2.json();
@@ -286,7 +288,7 @@
     // 8) При загрузке страницы:
     window.addEventListener('DOMContentLoaded', async () => {
       try {
-        const resp = await fetch('/check-auth', { credentials: 'include' });
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
         balanceEl.textContent = user.balance;
@@ -312,7 +314,7 @@
         return;
       }
       try {
-        const resp = await fetch('/roulette/join', {
+        const resp = await fetch(`${BASE_URL}/roulette/join`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -327,7 +329,7 @@
         drawWheelByList(players);
 
         // Обновляем баланс
-        const check = await fetch('/check-auth', { credentials: 'include' });
+        const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (check.ok) {
           const upd = await check.json();
           user.balance = upd.balance;

@@ -32,6 +32,8 @@
   </main>
 
   <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+
     let user = null;
     let coefficient = 1.0;
     let crashPoint = 0;
@@ -49,7 +51,7 @@
     // 1) При загрузке: проверяем сессию и показываем баланс
     window.addEventListener('DOMContentLoaded', async () => {
       try {
-        const resp = await fetch('/check-auth', { credentials: 'include' });
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
         balanceEl.textContent = user.balance;
@@ -86,7 +88,7 @@
       }
 
       try {
-        const resp = await fetch('/crash/start', {
+        const resp = await fetch(`${BASE_URL}/crash/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -151,7 +153,7 @@
 
       // Пытаемся «забрать» 
       try {
-        const resp = await fetch('/crash/cashout', {
+        const resp = await fetch(`${BASE_URL}/crash/cashout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

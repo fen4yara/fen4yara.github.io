@@ -5,17 +5,20 @@ const session = require('express-session');
 const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
+// На Railway или другой PaaS порт берётся из переменной окружения
+const PORT = process.env.PORT || 3000;
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: true,
+  origin: 'https://fen4yaragithubio-production.up.railway.app',
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 };
 app.use(cors(corsOptions));
+
 app.use(express.json());
+// Статика: отдаём HTML/CSS/JS прямо из корня проекта
 app.use(express.static(path.join(__dirname)));
 
 app.use(session({
@@ -24,7 +27,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: false,    // локально: false
+    secure: false,    // на PaaS по HTTPS можно поставить true, но в Railway/Linode автоматически HTTPS
     sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000
   }
@@ -211,8 +214,6 @@ app.get('/roulette/players', (req, res) => {
 });
 
 // === Endpoint → игрок присоединяется (POST /roulette/join)
-// === Endpoint → игрок присоединяется (POST /roulette/join)
-// === Endpoint → игрок присоединяется (POST /roulette/join)
 app.post('/roulette/join', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -237,13 +238,11 @@ app.post('/roulette/join', (req, res) => {
   const existing = roulettePlayers.find(p => p.username === username);
   if (existing) {
     existing.bet += bet;
-    // Цвет у existing.color остаётся прежним
+    // Цвет остаётся прежним
   } else {
-    // Если ещё нет в очереди, добавляем новым объектом с рандомным цветом
     roulettePlayers.push({ username, bet, color: getRandomColor() });
   }
 
-  // Возвращаем обновлённый список игроков (с теперь агрегированными ставками)
   res.json({ players: roulettePlayers });
 });
 
@@ -252,7 +251,6 @@ app.get('/roulette/next-spin', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  // Возвращаем nextSpin в миллисекундах
   res.json({ nextSpin });
 });
 
@@ -266,26 +264,11 @@ app.get('/roulette/result', (req, res) => {
   }
   res.json(lastSpinResult);
 });
-// ======= /ЛОГИКА «РУЛЕТКИ» С СЕРВЕРНЫМ ТАЙМЕРОМ =======
-
 
 // ========== ЛОГИКА «КРАШ» ==========
-/*
-  Мы будем хранить в памяти «активные игры» для каждого пользователя.
-  Клиент 1) делает POST /crash/start { bet }
-           → сервер проверяет баланс, снимает ставку, генерирует crashPoint и возвращает его.
-  Клиент 2) запускает у себя анимацию, сравнивает коэффициент и crashPoint, 
-           и если cashout до crashPoint, то делает POST /crash/cashout { coefficient }.
-  Если клиент не успел вытащить до crashPoint (т. е. frontend сам решил, что он «пробил»), 
-  он просто не вызывает /cashout и теряет свою ставку. 
-  После завершения раунда (либо cashout, либо краш), entry удаляется.
-*/
-
-const activeCrashGames = {};  
-// формат: activeCrashGames[username] = { bet: Number, crashPoint: Number, active: true }
+const activeCrashGames = {};  // формат: { [username]: { bet, crashPoint, active } }
 
 function generateCrashPoint() {
-  // примерно: 50% выпадет между 1.00–2.00, и т. п. (как в вашем коде)
   const rand = Math.random() * 100;
   let cp;
   if (rand <= 50) {
@@ -320,14 +303,9 @@ app.post('/crash/start', (req, res) => {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  // Снимаем ставку сразу
   updateUserBalance(username, user.balance - bet);
-
-  // Генерируем crashPoint и сохраняем игру
   const cp = generateCrashPoint();
   activeCrashGames[username] = { bet, crashPoint: cp, active: true };
-
-  // Возвращаем crashPoint (frontend будет использовать его для остановки анимации)
   res.json({ crashPoint: cp });
 });
 
@@ -346,28 +324,20 @@ app.post('/crash/cashout', (req, res) => {
     return res.status(400).json({ error: 'Игра не найдена или уже завершена' });
   }
 
-  // Если клиент пытается забрать после того, как фактический crashPoint уже пройден:
   if (coefficient >= game.crashPoint) {
-    // игрок «пробил», ничего не возвращаем (ставка уже снята), завершаем игру
     delete activeCrashGames[username];
     return res.status(400).json({ error: 'Уже крашнулся (нет выплат)' });
   }
 
-  // Иначе считаем выигрыш = ставка * coefficient
   const winnings = Math.floor(game.bet * coefficient);
-  const user = findUser(username);
-  if (user) {
-    updateUserBalance(username, user.balance + winnings);
+  const userObj = findUser(username);
+  if (userObj) {
+    updateUserBalance(username, userObj.balance + winnings);
   }
 
-  // Обозначаем игру завершённой
   delete activeCrashGames[username];
-
   res.json({ winnings, newBalance: findUser(username).balance });
 });
-// ========== /ЛОГИКА «КРАШ» ==========
-
-
 
 // === По умолчанию — отдаём login.html на корень ===
 app.get('/', (req, res) => {

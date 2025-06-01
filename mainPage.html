@@ -20,49 +20,50 @@
   </main>
 
   <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+
     // Проверка авторизации при загрузке страницы
-// Проверка авторизации при загрузке страницы
-async function checkAuth() {
-  try {
-    const response = await fetch('http://localhost:3000/check-auth', {
-      credentials: 'include'
-    });
+    async function checkAuth() {
+      try {
+        const response = await fetch(`${BASE_URL}/check-auth`, {
+          credentials: 'include'
+        });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Требуется авторизация');
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Требуется авторизация');
+        }
+
+        const user = await response.json();
+        document.getElementById('username').textContent = user.username;
+        document.getElementById('balance').textContent = user.balance;
+      } catch (err) {
+        console.error('Auth error:', err);
+        alert('Ошибка авторизации: ' + err.message);
+        window.location.href = 'index.html';
+      }
     }
 
-    const user = await response.json();
-    document.getElementById('username').textContent = user.username;
-    document.getElementById('balance').textContent = user.balance;
-  } catch (err) {
-    console.error('Auth error:', err);
-    alert('Ошибка авторизации: ' + err.message);
-    window.location.href = 'index.html';
-  }
-}
-
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  try {
-    const response = await fetch('http://localhost:3000/logout', {
-      method: 'POST',
-      credentials: 'include'
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${BASE_URL}/logout`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          window.location.href = 'index.html';
+        } else {
+          throw new Error('Не удалось выйти');
+        }
+      } catch (err) {
+        console.error('Logout error:', err);
+        alert('Ошибка при выходе: ' + err.message);
+      }
     });
-    
-    if (response.ok) {
-      window.location.href = 'index.html';
-    } else {
-      throw new Error('Не удалось выйти');
-    }
-  } catch (err) {
-    console.error('Logout error:', err);
-    alert('Ошибка при выходе: ' + err.message);
-  }
-});
 
-// Проверяем авторизацию при загрузке
-checkAuth();
-</script>
+    // Проверяем авторизацию при загрузке
+    checkAuth();
+  </script>
 </body>
 </html>
