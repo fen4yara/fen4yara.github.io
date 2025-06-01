@@ -10,26 +10,16 @@ const PORT = process.env.PORT || 3000;
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: 'https://fen4yaragithubio-production.up.railway.app',
+  origin: 'https://fen4yaragithubio-production-9286.up.railway.app', // <--- исправлено
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
-
+app.use(cors(corsOptions));
 app.use(express.json());
-// Статика: отдаём HTML/CSS/JS прямо из корня проекта
 app.use(express.static(path.join(__dirname)));
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://fen4yaragithubio-production-9286.up.railway.app");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
 
