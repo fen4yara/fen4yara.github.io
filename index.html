@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>320xbet</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <main>
+        <h1>Вход</h1>
+        <form id="loginForm">
+            <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
+            <button type="submit">Войти</button>
+        </form>
+        <p>Нет аккаунта? <a href="registration.html">Регистрация</a></p>
+    </main>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            if (!username) return alert('Введите имя!');
+
+      // Получаем из localStorage
+            const user = JSON.parse(localStorage.getItem('user'));
+            if (user && user.username === username) {
+                alert('Вход успешен!');
+                window.location.href = 'mainPage.html';
+            } else {
+                alert('Пользователь не найден! Зарегистрируйтесь.');
+            }
+        });
+    </script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+</body>
+</html>

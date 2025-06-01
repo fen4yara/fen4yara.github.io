@@ -1,53 +1,104 @@
 body {
-    --bg-color: var(--tg-theme-bg-color);
-    font: 12px/18px "Lucida Grande", "Lucida Sans Unicode", Arial, Helvetica, Verdana, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--tg-theme-text-color);
-    margin: 48px 24px;
-    padding: 0;
-    color-scheme: var(--tg-color-scheme);
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: #fff;
+  text-align: center;
+  margin: 0;
+  padding: 2rem;
 }
 
-a {
-    color: var(--tg-theme-link-color);
-}
-#viewport {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: 0;
-    height: var(--tg-viewport-stable-height, 100vh);
-    pointer-events: none;
-    transition: all .2s ease;
-}
-#viewport:after {
-    content: '';
-    display: block;
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    border-width: 4px;
-    border-style: solid;
-    border-image: linear-gradient(45deg, rgba(64, 224, 208, .5), rgba(173, 255, 47, .5)) 1;
+main {
+  max-width: 400px;
+  margin: auto;
+  background: #222;
+  padding: 1rem;
+  border-radius: 8px;
 }
 
-#viewport-params-size,
-#viewport-params-expand {
-    content: attr(text);
-    position: absolute;
-    display: inline-block;
-    background: var(--tg-theme-link-color, rgb(64, 224, 208));
-    right: 4px;
-    left: auto;
-    font-size: 8px;
-    padding: 4px;
-    vertical-align: top;
+input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: none;
+  border-radius: 4px;
 }
-#viewport-params-size {
-    top: 4px;
+
+button {
+  width: 100%;
+  padding: 0.5rem;
+  background: #4CAF50;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
 }
-#viewport-params-expand {
-    top: 30px;
+
+button:hover {
+  background: #45a049;
+}
+
+.game-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.game-modes button {
+  padding: 1rem;
+  font-size: 1.2rem;
+  background: #4CAF50;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.game-modes button:hover {
+  background: #45a049;
+}
+
+.bet-section {
+  margin: 1rem 0;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bet-section input {
+  flex: 1;
+  padding: 0.5rem;
+}
+
+.bet-section button {
+  flex: 1;
+  background: #4CAF50;
+  color: #fff;
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+.bet-section button:hover {
+  background: #45a049;
+}
+
+.roulette-area {
+  margin: 1rem 0;
+}
+
+.roulette-area canvas {
+  display: block;
+  margin: 0 auto;
+}
+
+.crash-area {
+  margin: 1rem 0;
+}
+
+.crash-area p {
+  font-size: 2rem;
+}
+
+#startBtn{
+    margin-bottom: 10px;
 }

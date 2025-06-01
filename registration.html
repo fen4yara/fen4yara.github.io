@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Регистрация</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>Регистрация</h1>
+    <form id="registerForm">
+      <input type="text" id="regUsername" placeholder="Имя пользователя" required />
+      <button type="submit">Зарегистрироваться</button>
+    </form>
+    <p>Уже есть аккаунт? <a href="index.html">Войти</a></p>
+  </main>
+
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const username = document.getElementById('regUsername').value.trim();
+      if (!username) return alert('Введите имя!');
+
+      // Для простоты, начнем с 100 конфеток
+      const user = {
+        username,
+        balance: 100
+      };
+
+      localStorage.setItem('user', JSON.stringify(user));
+      alert('Регистрация успешна!');
+      window.location.href = 'index.html'; // переход на главную
+    });
+  </script>
+</body>
+</html>

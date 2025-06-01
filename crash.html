@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Краш 🚀</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    #message {
+      font-weight: bold;
+      margin-top: 10px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🚀 Краш</h1>
+    <p>Баланс: <span id="balance"></span> 🍬</p>
+
+    <div class="crash-area">
+      <label for="bet">Ставка:</label>
+      <input type="number" id="bet" min="1" placeholder="Введите ставку" />
+      <br><br>
+      <p>Коэффициент: <span id="coefficient">1.00</span>x</p>
+      <button id="startBtn" onclick="startGame()">Начать</button>
+      <button id="cashoutBtn" onclick="cashOut()" disabled>Забрать</button>
+      <p id="message"></p>
+    </div>
+
+    <button onclick="window.location.href='mainPage.html'">⬅️ Назад</button>
+  </main>
+
+  <script>
+    let user = JSON.parse(localStorage.getItem('user'));
+    if (!user) {
+      window.location.href = 'login.html';
+    } else {
+      document.getElementById('balance').textContent = user.balance;
+    }
+
+    let coefficient = 1.0;
+    let interval;
+    let crashed = false;
+    let crashPoint = 0;
+    let betAmount = 0;
+
+    function getCrashPoint() {
+      const rand = Math.random() * 100;
+      if (rand <= 50) {
+        return (Math.random() * (2 - 1) + 1).toFixed(2);
+      } else if (rand <= 65) {
+        return (Math.random() * (5 - 3) + 3).toFixed(2);
+      } else if (rand <= 80) {
+        return (Math.random() * (10 - 5) + 5).toFixed(2);
+      } else if (rand <= 95) {
+        return (Math.random() * (50 - 10) + 10).toFixed(2);
+      } else {
+        return (Math.random() * (1500 - 50) + 50).toFixed(2);
+      }
+    }
+
+    function showMessage(msg, color = '#333') {
+      const el = document.getElementById('message');
+      el.textContent = msg;
+      el.style.color = color;
+    }
+
+    function startGame() {
+      const betInput = document.getElementById('bet').value;
+      if (!betInput || isNaN(betInput) || betInput <= 0 || betInput > user.balance) {
+        showMessage('Некорректная ставка!', 'red');
+        return;
+      }
+
+      betAmount = parseInt(betInput);
+      user.balance -= betAmount;
+      localStorage.setItem('user', JSON.stringify(user));
+      document.getElementById('balance').textContent = user.balance;
+
+      coefficient = 1.0;
+      document.getElementById('coefficient').textContent = coefficient.toFixed(2);
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('cashoutBtn').disabled = false;
+      document.getElementById('bet').disabled = true;
+      showMessage('Игра началась! 🚀');
+
+      crashed = false;
+      crashPoint = parseFloat(getCrashPoint());
+
+      let speed = 0.001;
+      interval = setInterval(() => {
+        if (crashed) return;
+
+        speed += 0.0001;
+        coefficient += speed;
+        document.getElementById('coefficient').textContent = coefficient.toFixed(2);
+
+        if (coefficient >= crashPoint) {
+          clearInterval(interval);
+          crashed = true;
+          showMessage('💥 Краш! Вы проиграли.', 'red');
+          document.getElementById('startBtn').disabled = false;
+          document.getElementById('cashoutBtn').disabled = true;
+          document.getElementById('bet').disabled = false;
+        }
+      }, 50);
+    }
+
+    function cashOut() {
+      if (crashed) return;
+
+      clearInterval(interval);
+      const winnings = Math.floor(betAmount * coefficient);
+      user.balance += winnings;
+      localStorage.setItem('user', JSON.stringify(user));
+      document.getElementById('balance').textContent = user.balance;
+
+      showMessage(`✅ Вы забрали ${winnings} 🍬 (Коэф: ${coefficient.toFixed(2)}x)`, 'green');
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('cashoutBtn').disabled = true;
+      document.getElementById('bet').disabled = false;
+    }
+  </script>
+</body>
+</html>

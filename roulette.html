@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎡 Рулетка</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .wheel {
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      border: 10px solid #333;
+      margin: 20px auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .wheel canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pointer {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 30px solid red;
+    }
+    #message {
+      font-weight: bold;
+      margin-top: 10px;
+      color: #333;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🎡 Рулетка</h1>
+    <p>Баланс: <span id="balance"></span> 🍬</p>
+
+    <div>
+      <label for="bet">Ставка:</label>
+      <input type="number" id="bet" min="1" placeholder="Введите ставку" />
+      <button onclick="joinGame()">Присоединиться</button>
+    </div>
+
+    <div class="wheel">
+      <canvas id="canvas" width="300" height="300"></canvas>
+      <div class="pointer"></div>
+    </div>
+
+    <p id="message"></p>
+    <button onclick="window.location.href='index.html'">⬅️ Назад</button>
+  </main>
+
+  <script>
+    let user = JSON.parse(localStorage.getItem('user'));
+    if (!user) {
+      window.location.href = 'login.html';
+    } else {
+      document.getElementById('balance').textContent = user.balance;
+    }
+
+    const players = [];
+
+    function showMessage(msg, color = '#333') {
+      const el = document.getElementById('message');
+      el.textContent = msg;
+      el.style.color = color;
+    }
+
+    function joinGame() {
+      const betInput = parseInt(document.getElementById('bet').value);
+      if (!betInput || betInput <= 0 || betInput > user.balance) {
+        showMessage('Некорректная ставка!', 'red');
+        return;
+      }
+
+      // Проверим, участвует ли уже пользователь
+      const existing = players.find(p => p.name === user.username);
+      if (existing) {
+        showMessage('Вы уже в игре!', 'red');
+        return;
+      }
+
+      user.balance -= betInput;
+      localStorage.setItem('user', JSON.stringify(user));
+      document.getElementById('balance').textContent = user.balance;
+
+      players.push({ name: user.username, bet: betInput, color: getRandomColor() });
+      showMessage(`Вы в игре! Ждем других игроков...`);
+      drawWheel();
+    }
+
+    function getRandomColor() {
+      const letters = '0123456789ABCDEF';
+      let color = '#';
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+
+    function drawWheel() {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const totalBet = players.reduce((sum, p) => sum + p.bet, 0);
+
+      let startAngle = 0;
+      players.forEach(p => {
+        const angle = (p.bet / totalBet) * 2 * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(150, 150);
+        ctx.arc(150, 150, 150, startAngle, startAngle + angle);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        startAngle += angle;
+      });
+    }
+
+    function spinWheel() {
+      if (players.length < 2) {
+        showMessage('Недостаточно игроков (нужно минимум 2).', 'orange');
+        return;
+      }
+
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+
+      let angle = 0;
+      const spinTime = 3000; // 3 секунды
+      const start = performance.now();
+
+      function animate(now) {
+        const progress = now - start;
+        const rotate = easeOut(progress / spinTime) * 10 * Math.PI;
+
+        ctx.save();
+        ctx.clearRect(0, 0, 300, 300);
+        ctx.translate(150, 150);
+        ctx.rotate(rotate + angle);
+        ctx.translate(-150, -150);
+        drawWheel();
+        ctx.restore();
+
+        if (progress < spinTime) {
+          requestAnimationFrame(animate);
+        } else {
+          angle += rotate;
+          const winner = getWinner((angle % (2 * Math.PI)));
+          user.balance += winner.name === user.username ? getTotalBet() : 0;
+          localStorage.setItem('user', JSON.stringify(user));
+          document.getElementById('balance').textContent = user.balance;
+          showMessage(`🎉 Победитель: ${winner.name}!`, 'green');
+          players.length = 0;
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    function easeOut(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function getWinner(finalAngle) {
+      const totalBet = players.reduce((sum, p) => sum + p.bet, 0);
+      let angleSum = 0;
+
+      for (let p of players) {
+        const angle = (p.bet / totalBet) * 2 * Math.PI;
+        if (finalAngle >= angleSum && finalAngle < angleSum + angle) {
+          return p;
+        }
+        angleSum += angle;
+      }
+      return players[players.length - 1];
+    }
+
+    function getTotalBet() {
+      return players.reduce((sum, p) => sum + p.bet, 0);
+    }
+
+    // Автоматический запуск рулетки каждые 20 секунд
+    setInterval(() => {
+      spinWheel();
+    }, 20000);
+  </script>
+</body>
+</html>
