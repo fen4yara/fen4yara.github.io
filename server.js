@@ -9,6 +9,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --------------- CORS ---------------
+const corsOptions = {
+  origin: 'https://fen4yaragithubio-production-9286.up.railway.app', // <--- исправлено
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(session({
