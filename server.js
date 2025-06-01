@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -5,12 +6,11 @@ const session = require('express-session');
 const cors = require('cors');
 
 const app = express();
-// На Railway или другой PaaS порт берётся из переменной окружения
 const PORT = process.env.PORT || 3000;
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: 'https://fen4yaragithubio-production-9286.up.railway.app', // <--- исправлено
+  origin: 'https://fen4yaragithubio-production-9286.up.railway.app',
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -19,18 +19,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(session({
-  secret: 'mySecretKey', // Замени на свой секрет
+  secret: 'mySecretKey',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: false } // false — для dev/test (HTTP), true — для HTTPS
+  cookie: { secure: false }
 }));
 app.use(express.static(path.join(__dirname)));
 
-
-
 const usersFile = path.join(__dirname, 'data', 'users.json');
-
-// Убедимся, что data/users.json существует
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -38,7 +34,6 @@ const ensureUsersFileExists = () => {
 };
 ensureUsersFileExists();
 
-// Вспомогательные функции для работы с users.json
 function readUsers() {
   const data = fs.readFileSync(usersFile, 'utf-8');
   return JSON.parse(data || '[]');
@@ -66,26 +61,17 @@ app.post('/register', (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username is required' });
 
-  // Получаем IP-адрес
   const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-
   try {
     const all = readUsers();
-
-    // Проверяем, зарегистрирован ли уже пользователь с таким IP
     if (all.find(u => u.ip === userIP)) {
       return res.status(400).json({ error: 'Регистрация с этого IP уже выполнена' });
     }
-
-    // Проверяем, нет ли такого username
     if (all.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
-
-    // Сохраняем IP вместе с пользователем
     all.push({ username, balance: 100, ip: userIP });
     writeUsers(all);
-
     res.json({ message: 'Регистрация успешна!' });
   } catch (err) {
     console.error(err);
@@ -93,14 +79,12 @@ app.post('/register', (req, res) => {
   }
 });
 
-
 app.post('/login', (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username is required' });
   try {
     const user = findUser(username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-
     req.session.user = { username: user.username };
     res.json({
       message: 'Аутентификация успешна',
@@ -139,21 +123,17 @@ app.post('/logout', (req, res) => {
     res.json({ message: 'Выход выполнен' });
   });
 });
-// ======= /регистрация / login / check-auth / logout =======
+// ======= конец auth =======
 
-
-
-let roulettePlayers = [];  
-// Формат: [{ username, bet, color }]
-
-let lastSpinResult = null;  
-// Формат: { winner: String, totalBet: Number, timestamp: Number }
-
+let roulettePlayers = [];   // очередь: [{ username, bet, color }]
+let lastSpinResult = null;  // { winner, totalBet, timestamp }
 const spinInterval = 20000; // 20 сек
-// Вычислим первый nextSpin: ближайшая «многократная» 20 000 мс
-let nextSpin = Date.now() + spinInterval - (Date.now() % spinInterval);
 
-// Вспомогательная функция для случайного цвета
+// Текущее запланированное время следующего спина (ms с эпохи). null, если пока не планировали.
+let nextSpin = null;
+let spinTimeoutId = null;
+
+// Генератор случайного цвета для сектора
 function getRandomColor() {
   const letters = '0123456789ABCDEF';
   let color = '#';
@@ -164,15 +144,17 @@ function getRandomColor() {
 }
 
 /**
- * runSpin() — вызывается автоматически каждые spinInterval.
- * Если игроков < 2 — просто очищает очередь без результатов.
- * Иначе выбирает случайного победителя пропорционально ставкам,
- * обновляет его баланс и заполняет lastSpinResult={…}.
+ * Запускает сам спин (выбирает победителя или очищает очередь),
+ * записывает lastSpinResult, сбрасывает очередь.
+ * Затем, если в очереди после спина снова ≥ 2 (теоретически это редко,
+ * т. к. мы после каждого спина чистим очередь, но оставим проверку
+ * «на всякий случай»), запускаем новый таймер;
+ * иначе nextSpin остаётся null до следующего join.
  */
 function runSpin() {
   const now = Date.now();
   if (roulettePlayers.length < 2) {
-    // Недостаточно игроков → просто очистим очередь, без результата
+    // Если меньше двух — просто очищаем очередь без результата
     roulettePlayers = [];
     lastSpinResult = null;
   } else {
@@ -204,17 +186,18 @@ function runSpin() {
     roulettePlayers = [];
   }
 
-  // После каждого runSpin пересчитаем следующий таймер
-  nextSpin = nextSpin + spinInterval;
+  // После спина сбрасываем nextSpin
+  nextSpin = null;
+  spinTimeoutId = null;
+
+  // Если после спина в очереди (вдруг) снова ≥ 2, запускаем новый таймер
+  if (roulettePlayers.length >= 2) {
+    nextSpin = Date.now() + spinInterval;
+    spinTimeoutId = setTimeout(runSpin, spinInterval);
+  }
 }
 
-// Запустим initial spin через (nextSpin - Date.now()) мс, а затем интервалы
-setTimeout(() => {
-  runSpin();
-  setInterval(runSpin, spinInterval);
-}, nextSpin - Date.now());
-
-// === Endpoint → вернуть список текущих игроков
+// === Endpoint → вернуть список текущих игроков ===
 app.get('/roulette/players', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -222,7 +205,7 @@ app.get('/roulette/players', (req, res) => {
   res.json({ players: roulettePlayers });
 });
 
-// === Endpoint → игрок присоединяется (POST /roulette/join)
+// === Endpoint → игрок присоединяется (POST /roulette/join) ===
 app.post('/roulette/join', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -243,27 +226,33 @@ app.post('/roulette/join', (req, res) => {
   // Снимаем баланс
   updateUserBalance(username, user.balance - bet);
 
-  // Если в очереди уже есть запись с этим username, просто добавляем новую ставку
+  // Если уже есть такой игрок — просто добавляем к его ставке
   const existing = roulettePlayers.find(p => p.username === username);
   if (existing) {
     existing.bet += bet;
-    // Цвет остаётся прежним
   } else {
     roulettePlayers.push({ username, bet, color: getRandomColor() });
+  }
+
+  // Если после добавления стало ровно 2 игрока, запускаем «динамический» таймер
+  if (roulettePlayers.length === 2 && nextSpin === null) {
+    nextSpin = Date.now() + spinInterval;
+    spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 
   res.json({ players: roulettePlayers });
 });
 
-// === Endpoint → следующая метка времени спина
+// === Endpoint → следующая метка времени спина ===
 app.get('/roulette/next-spin', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
+  // Если nextSpin === null, значит спин ещё не запланирован (менее 2 игроков)
   res.json({ nextSpin });
 });
 
-// === Endpoint → последний результат спина (если уже был)
+// === Endpoint → последний результат спина ===
 app.get('/roulette/result', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -274,9 +263,8 @@ app.get('/roulette/result', (req, res) => {
   res.json(lastSpinResult);
 });
 
-// ========== ЛОГИКА «КРАШ» ==========
-const activeCrashGames = {};  // формат: { [username]: { bet, crashPoint, active } }
-
+// === Crash-игра (без изменений) ===
+const activeCrashGames = {};
 function generateCrashPoint() {
   const rand = Math.random() * 100;
   let cp;
