@@ -192,9 +192,11 @@ function runSpin() {
 
     // Обновляем баланс победителя
     const winUser = findUser(winner.username);
-    if (winUser) {
-      updateUserBalance(winner.username, winUser.balance + totalBet);
-    }
+   if (winUser) {
+  const newBalance = Math.round(winUser.balance + totalBet - 0.08 * totalBet);
+  updateUserBalance(winner.username, newBalance);
+}
+
 
     lastSpinResult = {
       winner: winner.username,
