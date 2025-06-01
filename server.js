@@ -262,7 +262,8 @@ app.post('/roulette/join', (req, res) => {
   } else {
     roulettePlayers.push({ username, bet, color: getRandomColor() });
   }
- if (currentPlayers.length >= 2) {
+
+  if (currentPlayers.length >= 2) {
     if (!spinTimeout) startSpinTimer();
   } else {
     // Меньше 2 игроков — сбрасываем таймер
@@ -271,9 +272,11 @@ app.post('/roulette/join', (req, res) => {
       spinTimeout = null;
       nextSpinTime = null;
     }
+  }
 
   res.json({ players: roulettePlayers });
 });
+
 
 // === Endpoint → следующая метка времени спина
 app.get('/roulette/next-spin', (req, res) => {
