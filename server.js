@@ -9,16 +9,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --------------- CORS ---------------
-const corsOptions = {
-  origin: 'https://fen4yaragithubio-production-9286.up.railway.app', // <--- исправлено
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
-
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(session({
+  secret: 'mySecretKey', // Замени на свой секрет
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false } // false — для dev/test (HTTP), true — для HTTPS
+}));
 app.use(express.static(path.join(__dirname)));
+
 
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
