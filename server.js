@@ -66,19 +66,33 @@ app.post('/register', (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username is required' });
 
+  // Получаем IP-адрес
+  const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
   try {
     const all = readUsers();
+
+    // Проверяем, зарегистрирован ли уже пользователь с таким IP
+    if (all.find(u => u.ip === userIP)) {
+      return res.status(400).json({ error: 'Регистрация с этого IP уже выполнена' });
+    }
+
+    // Проверяем, нет ли такого username
     if (all.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
-    all.push({ username, balance: 100 });
+
+    // Сохраняем IP вместе с пользователем
+    all.push({ username, balance: 100, ip: userIP });
     writeUsers(all);
+
     res.json({ message: 'Регистрация успешна!' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера при регистрации' });
   }
 });
+
 
 app.post('/login', (req, res) => {
   const { username } = req.body;
