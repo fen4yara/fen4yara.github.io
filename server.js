@@ -308,6 +308,7 @@ app.get('/roulette/result', (req, res) => {
  * - crashHistory держит последние 5 раундов.
  */
 
+
 const BET_DELAY    = 10 * 1000;    // 10 сек фаза ставок
 const BASE_SPEED   = 0.1;          // базовая скорость (в 1/sec)
 const ACCEL        = 0.02;         // ускорение (в 1/sec²)
@@ -584,7 +585,8 @@ app.get('/crash/history', (req, res) => {
   res.json(crashHistory);
 });
 
-app.get('/', (req, res) => {Add commentMore actions
+// === По умолчанию — отдаём login.html на корень ===
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
