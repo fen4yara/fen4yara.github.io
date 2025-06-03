@@ -59,28 +59,36 @@ function updateUserBalance(username, newBalance) {
 // ======= регистрация / login / check-auth / logout =======
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
 
   const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   try {
     const all = readUsers();
 
-    // Проверяем, зарегистрирован ли кто-то с этого IP
-    if (all.find(u => u.ip === userIP)) {
-      return res.status(400).json({ error: 'Регистрация с этого IP уже выполнена' });
-    }
+    // Проверяем, есть ли уже аккаунт с таким IP
+    const existingUserByIP = all.find(u => u.ip === userIP);
 
-    // Проверяем уникальность имени
+    // Проверяем, не занят ли username
     if (all.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
 
-    // Добавляем пользователя с ХЭШЕМ пароля
-    all.push({ username, passwordHash: password, balance: 1000, ip: userIP });
+    // Хэшируем пароль
+    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+
+    const newUser = { username, passwordHash, balance: 1000, ip: userIP };
+    all.push(newUser);
     writeUsers(all);
 
-    res.json({ message: 'Регистрация успешна!' });
+    // Если IP уже есть в базе, сразу авторизуем пользователя
+    if (existingUserByIP && existingUserByIP.ip === userIP) {
+      req.session.user = { username: newUser.username };
+    }
+
+    res.json({ message: 'Регистрация успешна! Вы автоматически вошли в систему' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера при регистрации' });
@@ -95,18 +103,17 @@ app.post('/login', (req, res) => {
     const user = findUser(username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
-    // Сравниваем ХЭШИ паролей
-    if (user.passwordHash !== password) {
+    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+
+    if (user.passwordHash !== passwordHash) {
       return res.status(401).json({ error: 'Неверный пароль' });
     }
 
     req.session.user = { username: user.username };
+
     res.json({
       message: 'Аутентификация успешна',
-      user: {
-        username: user.username,
-        balance: user.balance
-      }
+      user: { username: user.username, balance: user.balance }
     });
   } catch (err) {
     console.error(err);
@@ -122,11 +129,7 @@ app.get('/check-auth', (req, res) => {
   try {
     const user = findUser(req.session.user.username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-
-    res.json({
-      username: user.username,
-      balance: user.balance
-    });
+    res.json({ username: user.username, balance: user.balance });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
@@ -144,6 +147,7 @@ app.post('/logout', (req, res) => {
   });
 });
 // ======= конец auth =======
+
 
 
 let roulettePlayers = [];    // текущая очередь: [{ username, bet, color }]
