@@ -306,7 +306,8 @@ app.get('/roulette/result', (req, res) => {
   }
   res.json(lastSpinResult);
 });
-// === Crash-игра (без изменений) ===
+
+// ========== «КРАШ» (оставляем без изменений) ==========
 const activeCrashGames = {};
 function generateCrashPoint() {
   const rand = Math.random() * 100;
