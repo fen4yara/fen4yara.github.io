@@ -160,7 +160,7 @@
       });
     }
 
-    // 1) Получаем игроков + nextSpin (каждые 500 мс)
+    // 1) Получаем игроков + nextSpin + serverTime (каждые 500 мс)
     async function fetchPlayersAndDraw() {
       try {
         const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
@@ -172,9 +172,17 @@
         players = data.players;
         drawWheelByList(players);
 
-        // Если сервер прислал новый nextSpin, перенастраиваем отсчёт
-        if (data.nextSpin !== nextSpinTimestamp) {
-          nextSpinTimestamp = data.nextSpin;
+        // Пересчитываем локальную метку nextSpinTimestamp:
+        if (data.nextSpin !== null) {
+          const offset = Date.now() - data.serverTime;
+          const localNext = data.nextSpin + offset;
+          if (localNext !== nextSpinTimestamp) {
+            nextSpinTimestamp = localNext;
+            startCountdown();
+          }
+        } else if (nextSpinTimestamp !== null) {
+          // Если сервер вдруг вернул null, сбрасываем локально
+          nextSpinTimestamp = null;
           startCountdown();
         }
       } catch (err) {
@@ -182,14 +190,21 @@
       }
     }
 
-    // 2) По-прежнему можно опрашивать /next-spin, но это дублирует предыдущую функцию
+    // 2) Функция опроса /next-spin (дублирует логику, но может пригодиться)
     async function fetchNextSpin() {
       try {
         const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не удалось получить next-spin');
         const data = await resp.json();
-        if (data.nextSpin !== nextSpinTimestamp) {
-          nextSpinTimestamp = data.nextSpin;
+        if (data.nextSpin !== null) {
+          const offset = Date.now() - data.serverTime;
+          const localNext = data.nextSpin + offset;
+          if (localNext !== nextSpinTimestamp) {
+            nextSpinTimestamp = localNext;
+            startCountdown();
+          }
+        } else if (nextSpinTimestamp !== null) {
+          nextSpinTimestamp = null;
           startCountdown();
         }
       } catch (err) {
@@ -197,7 +212,7 @@
       }
     }
 
-    // Запускаем обратный отсчёт (с Math.ceil)
+    // 3) Запускаем обратный отсчёт, один раз вызываем animateSpin()
     function startCountdown() {
       if (countdownInterval) {
         clearInterval(countdownInterval);
@@ -214,8 +229,8 @@
       function updateTimer() {
         const now = Date.now();
         let remainingMs = nextSpinTimestamp - now;
-        let diff = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
-        timerEl.textContent = diff + ' с';
+        let secondsLeft = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+        timerEl.textContent = secondsLeft + ' с';
 
         if (now >= nextSpinTimestamp) {
           clearInterval(countdownInterval);
@@ -227,7 +242,7 @@
       countdownInterval = setInterval(updateTimer, 200);
     }
 
-    // 3) Анимация спина
+    // 4) Анимация спина
     async function animateSpin() {
       if (isAnimating) return;
       isAnimating = true;
@@ -236,7 +251,7 @@
       try {
         const r = await fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' });
         if (!r.ok) {
-          console.warn('Результат пока недоступен, попробую через 500 мс');
+          console.warn('Результат пока недоступен, попробуем через 500 мс');
           isAnimating = false;
           setTimeout(animateSpin, 500);
           return;
@@ -260,13 +275,11 @@
 
       showMessage('Крутим…');
 
-      // Вычисляем угловые отрезки
       const slices = computeSlices(spinPlayers);
       let targetSlice = slices.find(s => s.username === winnerUsername);
       if (!targetSlice) targetSlice = slices[0];
 
       const midAngle = targetSlice.startAngle + (targetSlice.endAngle - targetSlice.startAngle) / 2;
-      // Поворот: (3π/2 − midAngle) + 4 полных оборота
       const extraRotations = 4 * 2 * Math.PI;
       const currentRotation = 0;
       const finalRotation = extraRotations + (3 * Math.PI / 2) - midAngle;
@@ -327,7 +340,7 @@
       });
     }
 
-    // 4) При загрузке страницы
+    // 5) При загрузке страницы сразу получаем игроков + nextSpin + serverTime
     window.addEventListener('DOMContentLoaded', async () => {
       try {
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
@@ -335,10 +348,8 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
 
-        // Запускаем быстрый опрос (500 мс) игроков и nextSpin
         await fetchPlayersAndDraw();
         setInterval(fetchPlayersAndDraw, 500);
-        // Дополнительно, но необязательно:
         setInterval(fetchNextSpin, 500);
       } catch (err) {
         alert('Пожалуйста, сначала войдите.');
@@ -346,7 +357,7 @@
       }
     });
 
-    // 5) Обработчик «Присоединиться»
+    // 6) При клике «Присоединиться»
     joinBtn.addEventListener('click', async () => {
       const betValue = parseInt(document.getElementById('bet').value);
       if (!betValue || betValue <= 0) {
@@ -369,11 +380,9 @@
           throw new Error(data.error || 'Ошибка при join');
         }
 
-        // Обновляем локальные players и рисуем
         players = data.players;
         drawWheelByList(players);
 
-        // Обновляем баланс
         const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (check.ok) {
           const upd = await check.json();
@@ -382,8 +391,13 @@
         }
         showMessage('Вы в игре. Ждём спина...', '#333');
 
-        // Берём точную метку из ответа и сразу запускаем отсчёт
-        nextSpinTimestamp = data.nextSpin;
+        // Теперь корректно рассчитываем локальную метку для отсчёта
+        if (data.nextSpin !== null) {
+          const offset = Date.now() - data.serverTime;
+          nextSpinTimestamp = data.nextSpin + offset;
+        } else {
+          nextSpinTimestamp = null;
+        }
         startCountdown();
       } catch (err) {
         showMessage(err.message, 'red');
