@@ -338,13 +338,13 @@ function getRandomColor() {
 function generateCrashPoint() {
   const rand = Math.random() * 100;
   let cp;
-  if (rand <= 50) {
+  if (rand <= 75) {
     cp = Math.random() * (2 - 1) + 1;
-  } else if (rand <= 65) {
+  } else if (rand <= 90) {
     cp = Math.random() * (5 - 3) + 3;
-  } else if (rand <= 80) {
-    cp = Math.random() * (10 - 5) + 5;
   } else if (rand <= 95) {
+    cp = Math.random() * (10 - 5) + 5;
+  } else if (rand <= 98) {
     cp = Math.random() * (50 - 10) + 10;
   } else {
     cp = Math.random() * (1500 - 50) + 50;
