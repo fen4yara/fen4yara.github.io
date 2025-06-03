@@ -20,33 +20,43 @@
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
 
-    document.getElementById('registerForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const username = document.getElementById('regUsername').value.trim();
-      if (!username) return alert('Введите имя!');
+    async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
 
-      try {
-        const response = await fetch(`${BASE_URL}/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ username }),
-          mode: 'cors'
-        });
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  if (!username || !password) return alert('Введите имя и пароль!');
 
-        const data = await response.json();
+  const hashedPassword = await hashPassword(password);
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Ошибка регистрации');
-        }
-
-        alert(data.message);
-        window.location.href = 'index.html';
-      } catch (err) {
-        alert('Ошибка: ' + err.message);
-      }
+  try {
+    const response = await fetch(`${BASE_URL}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: hashedPassword }),
+      mode: 'cors'
     });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Ошибка регистрации');
+    }
+
+    alert(data.message);
+    window.location.href = 'index.html';
+  } catch (err) {
+    alert('Ошибка: ' + err.message);
+  }
+});
   </script>
 </body>
 </html>
