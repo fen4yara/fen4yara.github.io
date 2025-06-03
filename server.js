@@ -113,19 +113,33 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/check-auth', (req, res) => {
-  // Проверяем только сессию, без «автоавторизации» по IP
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
+  // 1) Сначала проверяем: если сессия уже есть, возвращаем данные пользователя
+  if (req.session.user) {
+    try {
+      const user = findUser(req.session.user.username);
+      if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+      return res.json({ username: user.username, balance: user.balance });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
+    }
   }
-  try {
-    const user = findUser(req.session.user.username);
-    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-    res.json({ username: user.username, balance: user.balance });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
+
+  // 2) Если сессии нет, пробуем «авто-логин» по IP
+  const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const all = readUsers();
+  const user = all.find(u => u.ip === userIP);
+
+  if (user) {
+    // Нашли запись по IP → создаём сессию
+    req.session.user = { username: user.username };
+    return res.json({ username: user.username, balance: user.balance });
   }
+
+  // 3) Если ни сессия, ни IP совпадения — пользователь не авторизован
+  return res.status(401).json({ error: 'Не авторизован' });
 });
+
 
 app.post('/logout', (req, res) => {
   req.session.destroy(err => {
