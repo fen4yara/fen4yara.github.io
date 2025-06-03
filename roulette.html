@@ -43,8 +43,12 @@
       text-align: center;
       margin-top: 5px;
     }
+    #countdown-text {
+      display: inline;
+    }
     #timer {
       font-weight: bold;
+      display: inline;
       margin-left: 5px;
     }
     #legend {
@@ -76,8 +80,7 @@
       <button id="joinBtn">Присоединиться</button>
     </div>
     <div id="countdown">
-      <!-- По-умолчанию: Ожидание второго игрока -->
-      Ожидание второго игрока…
+      <span id="countdown-text">Ожидание второго игрока…</span>
       <span id="timer"></span>
     </div>
 
@@ -106,6 +109,7 @@
     const joinBtn = document.getElementById('joinBtn');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const countdownTextEl = document.getElementById('countdown-text');
     const timerEl = document.getElementById('timer');
     const legendEl = document.getElementById('legend');
 
@@ -227,7 +231,7 @@
       try {
         const r = await fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' });
         if (!r.ok) {
-          // Если результат ещё не доступен, просто пробуем через полсекунды
+          // Если результат ещё не доступен, повторяем через 500 мс
           console.warn('Результат пока недоступен, повторю через 500 мс');
           setTimeout(animateSpin, 500);
           return;
@@ -235,16 +239,14 @@
         resultData = await r.json();
       } catch (err) {
         console.error('Ошибка при запросе /roulette/result:', err);
-        // Если ошибка сети, попробуем ещё раз через секунду
         setTimeout(animateSpin, 1000);
         return;
       }
 
-      const spinPlayers = resultData.players;     // это «отфильтрованный» snapshot, которым оперировал сервер
+      const spinPlayers = resultData.players;     // snapshot, которым оперировал сервер
       const winnerUsername = resultData.winner;
       if (!spinPlayers || spinPlayers.length < 2) {
         showMessage('Недостаточно игроков для спина.', 'orange');
-        // Сразу снова синхронизируем следующий спин
         isAnimating = false;
         fetchNextSpin();
         return;
@@ -254,27 +256,23 @@
       showMessage('Крутим…');
 
       // 6.2) Строим массив с угловыми интервалами для каждой ставки
-      //      чтобы найти, на каком именно отрезке оказался winnerUsername
       const slices = computeSlices(spinPlayers);
       let targetSlice = slices.find(s => s.username === winnerUsername);
       if (!targetSlice) {
-        // На всякий случай: если не нашли, просто возьмём первый
+        // На случай, если не нашли (маловероятно) — возьмём первый
         targetSlice = slices[0];
       }
 
       // 6.3) Рассчитываем конечный угол, на который нужно прокрутить
-      // Хочется, чтобы pointer (0 радиан, «вверх») совпал с серединой победного отрезка:
       const midAngle = targetSlice.startAngle + (targetSlice.endAngle - targetSlice.startAngle) / 2;
-      // Но наш canvas рисует от 0 радиан вправо. У нас стрелка смотрит «вверх» (−π/2).
-      // Значит, чтобы стрелка указала на midAngle, нужно повернуть колесо на (3π/2 − midAngle) + k·2π.
-      // Домножим на K оборотов (скажем, 4 полных оборота) для красоты.
+      // Наш canvas рисует от 0 радиан вправо, стрелка смотрит «вверх» (−π/2).
+      // Чтобы стрелка указала на midAngle, нужен поворот (3π/2 − midAngle) + K·2π.
       const extraRotations = 4 * 2 * Math.PI;
-      // Текущий остаточный угол (если мы не сохраняли предыдущее вращение, считаем, что текущий 0)
       const currentRotation = 0;
       const finalRotation = extraRotations + (3 * Math.PI / 2) - midAngle;
 
       // 6.4) Запускаем анимацию плавного вращения от currentRotation до finalRotation
-      const spinDuration = 3000; // в миллисекундах
+      const spinDuration = 3000; // мс
       const startTime = performance.now();
 
       function frame(now) {
@@ -310,7 +308,7 @@
             })
             .catch(err => console.error(err))
             .finally(() => {
-              // Сброс флагов и синхронизация: теперь на клиенте уже в очереди никто не сидит
+              // Сброс флагов и синхронизация: очередь пуста
               players = [];
               isAnimating = false;
               // Запрашиваем новый next-spin
@@ -325,11 +323,12 @@
     // 7) Обратный отсчёт до nextSpinTimestamp
     function startCountdown() {
       if (nextSpinTimestamp === null) {
+        // Ждём второго игрока
+        countdownTextEl.textContent = 'Ожидание второго игрока…';
         timerEl.textContent = '';
-        document.getElementById('countdown').firstChild.nodeValue = 'Ожидание второго игрока…';
         return;
       }
-      document.getElementById('countdown').firstChild.nodeValue = 'До следующего спина: ';
+      countdownTextEl.textContent = 'До следующего спина:';
       function updateTimer() {
         const now = Date.now();
         let diff = Math.floor((nextSpinTimestamp - now) / 1000);
@@ -341,7 +340,6 @@
         updateTimer();
         if (Date.now() >= nextSpinTimestamp) {
           clearInterval(intervalId);
-          // При достижении нуля сразу запускаем анимацию
           scheduleSpinAnimation();
         }
       }, 200);
@@ -398,6 +396,8 @@
           balanceEl.textContent = user.balance;
         }
         showMessage('Вы в игре. Ждём спина...', '#333');
+        // Сразу запросим новый next-spin, чтобы узнать время спина
+        fetchNextSpin();
       } catch (err) {
         showMessage(err.message, 'red');
       }
