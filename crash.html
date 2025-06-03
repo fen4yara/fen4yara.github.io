@@ -23,7 +23,7 @@
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       max-width: 400px;
       margin: auto;
-      
+      background: #fff;
     }
     .crash-area label {
       font-weight: bold;
@@ -48,11 +48,11 @@
       border-radius: 4px;
       cursor: pointer;
     }
-    #startBtn {
+    #actionBtn.start {
       background: #007bff;
       color: #fff;
     }
-    #cashoutBtn {
+    #actionBtn.cashout {
       background: #28a745;
       color: #fff;
     }
@@ -88,7 +88,7 @@
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       max-width: 600px;
       margin: 30px auto 0;
-      
+      background: #fff;
     }
     .history-area h2 {
       margin-bottom: 10px;
@@ -132,7 +132,8 @@
     <label for="bet">Ставка:</label>
     <input type="number" id="bet" min="1" placeholder="Введите ставку" />
     <div class="buttons">
-<button id="actionBtn" class="start" disabled>Начать</button>
+      <!-- Одна кнопка, которая меняет класс и текст -->
+      <button id="actionBtn" class="start" disabled>Начать</button>
     </div>
     <div class="coef-display">
       Коэффициент: <span id="coefficient">1.00</span>x
@@ -172,8 +173,7 @@
     const balanceEl = document.getElementById('balance');
     const coefficientEl = document.getElementById('coefficient');
     const messageEl = document.getElementById('message');
-    const startBtn = document.getElementById('startBtn');
-    const cashoutBtn = document.getElementById('cashoutBtn');
+    const actionBtn = document.getElementById('actionBtn');
     const betInputEl = document.getElementById('bet');
     const playersContainer = document.getElementById('playersContainer');
     const historyList = document.getElementById('historyList');
@@ -181,8 +181,8 @@
     let bettingEndTime = null;
     let crashTime = null;
     let crashEnded = true;
-    let hasBet = false;
-    let hasCashedOut = false;
+    let hasBet = false;       // true, если пользователь уже поставил текущую ставку
+    let hasCashedOut = false; // true после нажатия «Забрать»
 
     window.addEventListener('DOMContentLoaded', async () => {
       try {
@@ -191,7 +191,7 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
 
-        // Сразу подтягиваем состояние и историю
+        // Сразу подтягиваем состояние раунда и историю
         await fetchCrashState();
         await loadHistory();
 
@@ -245,11 +245,13 @@
           clearInterval(clientTimerId);
           clientTimerId = null;
           coefficientEl.textContent = '1.00';
-          startBtn.disabled = false;
-          cashoutBtn.disabled = true;
           betInputEl.disabled = false;
           hasBet = false;
           hasCashedOut = false;
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Начать';
+          actionBtn.classList.remove('cashout');
+          actionBtn.classList.add('start');
           showMessage('Ждём нового раунда', '#333');
           return;
         }
@@ -261,48 +263,69 @@
           coefficientEl.textContent = '1.00';
           const secsLeft = Math.ceil((bettingEndTime - now) / 1000);
           showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
-          startBtn.disabled = true;
           betInputEl.disabled = true;
-          cashoutBtn.disabled = true;
+          actionBtn.disabled = true;
           return;
         }
 
         // 3) Фаза роста (bettingEndTime ≤ now < crashTime):
         if (now >= bettingEndTime && now < crashTime) {
-          startBtn.disabled = true;
-          betInputEl.disabled = true;
-          cashoutBtn.disabled = false; // В этот момент «Забрать» доступна
-          showMessage('Раунд идёт... 🚀', '#333');
-          if (!clientTimerId) {
-            clientTimerId = setInterval(drawCoefficient, 100);
+          // Если пользователь ещё не поставил — запрещаем «Забрать»
+          if (!hasBet) {
+            actionBtn.disabled = true;
+            showMessage('Раунд начался, но вы не поставили', '#333');
+          } else {
+            // Пользователь поставил — меняем кнопку на «Забрать»
+            actionBtn.disabled = false;
+            actionBtn.textContent = 'Забрать';
+            actionBtn.classList.remove('start');
+            actionBtn.classList.add('cashout');
+            showMessage('Раунд идёт... 🚀', '#333');
           }
+          betInputEl.disabled = true;
+          startDrawingCoefficient();
           return;
         }
 
         // 4) Если now ≥ crashTime — краш
         if (now >= crashTime) {
-          clearInterval(clientTimerId);
-          clientTimerId = null;
+          stopDrawingCoefficient();
           if (data.crashPoint !== null) {
-            // Показываем точный коэффициент краша
             coefficientEl.textContent = data.crashPoint.toFixed(2);
             showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
           } else {
             coefficientEl.textContent = '1.00';
             showMessage('Ждём нового раунда', '#333');
           }
-          startBtn.disabled = false;
-          cashoutBtn.disabled = true;
           betInputEl.disabled = false;
           hasBet = false;
           hasCashedOut = false;
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Начать';
+          actionBtn.classList.remove('cashout');
+          actionBtn.classList.add('start');
           renderPlayers(data.players);
           await updateBalanceInUI();
-          await loadHistory(); // автоматически обновляем историю сразу после краша
+          await loadHistory(); // автоматически обновляем историю после краша
         }
       } catch (err) {
         console.error(err);
         showMessage(err.message, 'red');
+      }
+    }
+
+    // Запускаем горизонтальный таймер для плавного роста
+    function startDrawingCoefficient() {
+      if (!clientTimerId) {
+        clientTimerId = setInterval(drawCoefficient, 100);
+      }
+    }
+
+    // Останавливаем таймер плавного роста
+    function stopDrawingCoefficient() {
+      if (clientTimerId) {
+        clearInterval(clientTimerId);
+        clientTimerId = null;
       }
     }
 
@@ -317,8 +340,7 @@
 
         // Если раунд уже завершился:
         if (data.ended) {
-          clearInterval(clientTimerId);
-          clientTimerId = null;
+          stopDrawingCoefficient();
           if (data.crashPoint !== null) {
             coefficientEl.textContent = data.crashPoint.toFixed(2);
             showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
@@ -326,29 +348,31 @@
             coefficientEl.textContent = '1.00';
             showMessage('Ждём нового раунда', '#333');
           }
-          startBtn.disabled = false;
-          cashoutBtn.disabled = true;
           betInputEl.disabled = false;
           hasBet = false;
           hasCashedOut = false;
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Начать';
+          actionBtn.classList.remove('cashout');
+          actionBtn.classList.add('start');
           renderPlayers(data.players);
           await updateBalanceInUI();
           await loadHistory();
           return;
         }
 
-        // Если ещё фаза ставок (мало вероятно попасть сюда, но на всякий случай):
+        // Если ещё фаза ставок (на всякий случай):
         if (now < data.bettingEndTime) {
           coefficientEl.textContent = '1.00';
           const secsLeft = Math.ceil((data.bettingEndTime - now) / 1000);
           showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
-          cashoutBtn.disabled = true;
+          actionBtn.disabled = true;
           return;
         }
 
         // Если в фазе роста (data.bettingEndTime ≤ now < data.crashTime):
         if (now >= data.bettingEndTime && now < data.crashTime) {
-          const elapsedSec = (now - data.bettingEndTime) / 1000; // секунды после старта роста
+          const elapsedSec = (now - data.bettingEndTime) / 1000; // сек после старта роста
           // модель: coef = 1 + BASE_SPEED·t + 0.5·ACCEL·t²
           const coef = 1 + BASE_SPEED * elapsedSec + 0.5 * ACCEL * elapsedSec * elapsedSec;
           coefficientEl.textContent = coef.toFixed(2);
@@ -356,10 +380,9 @@
           return;
         }
 
-        // Если уже ≥ crashTime (браузер мог зацейтноть), выводим краш:
+        // Если уже ≥ crashTime:
         if (now >= data.crashTime) {
-          clearInterval(clientTimerId);
-          clientTimerId = null;
+          stopDrawingCoefficient();
           if (data.crashPoint !== null) {
             coefficientEl.textContent = data.crashPoint.toFixed(2);
             showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
@@ -367,11 +390,13 @@
             coefficientEl.textContent = '1.00';
             showMessage('Ждём нового раунда', '#333');
           }
-          startBtn.disabled = false;
-          cashoutBtn.disabled = true;
           betInputEl.disabled = false;
           hasBet = false;
           hasCashedOut = false;
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Начать';
+          actionBtn.classList.remove('cashout');
+          actionBtn.classList.add('start');
           renderPlayers(data.players);
           await updateBalanceInUI();
           await loadHistory();
@@ -390,92 +415,95 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
       } catch {
-        // ничего
+        // игнорируем
       }
     }
 
-    // «Начать» (join)
-    startBtn.addEventListener('click', async () => {
-      const betValue = parseInt(betInputEl.value);
-      if (!betValue || betValue <= 0) {
-        showMessage('Некорректная ставка!', 'red');
-        return;
-      }
-      if (betValue > user.balance) {
-        showMessage('Недостаточно средств!', 'red');
-        return;
-      }
-
-      try {
-        const resp = await fetch(`${BASE_URL}/crash/join`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ bet: betValue })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Ошибка при ставке');
+    // Обработчик для одной кнопки «actionBtn»
+    actionBtn.addEventListener('click', async () => {
+      // Если ещё не поставил → начинаем раунд
+      if (!hasBet) {
+        const betValue = parseInt(betInputEl.value);
+        if (!betValue || betValue <= 0) {
+          showMessage('Некорректная ставка!', 'red');
+          return;
+        }
+        if (betValue > user.balance) {
+          showMessage('Недостаточно средств!', 'red');
+          return;
         }
 
-        user.balance -= betValue;
-        balanceEl.textContent = user.balance;
-
-        renderPlayers(data.players);
-        bettingEndTime = data.bettingEndTime;
-        crashTime = data.crashTime;
-        crashEnded = data.ended;
-
-        startBtn.disabled = true;
-        betInputEl.disabled = true;
-        hasBet = true;
-        hasCashedOut = false;
-
-        const now = Date.now();
-        if (now < bettingEndTime) {
-          coefficientEl.textContent = '1.00';
-          const secsLeft = Math.ceil((bettingEndTime - now) / 1000);
-          showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
-        } else if (now >= bettingEndTime && now < crashTime) {
-          showMessage('Раунд идёт... 🚀', '#333');
-          if (!clientTimerId) {
-            clientTimerId = setInterval(drawCoefficient, 100);
+        try {
+          const resp = await fetch(`${BASE_URL}/crash/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ bet: betValue })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || 'Ошибка при ставке');
           }
+
+          user.balance -= betValue;
+          balanceEl.textContent = user.balance;
+
+          renderPlayers(data.players);
+          bettingEndTime = data.bettingEndTime;
+          crashTime = data.crashTime;
+          crashEnded = data.ended;
+
+          hasBet = true;
+          hasCashedOut = false;
+          betInputEl.disabled = true;
+          actionBtn.disabled = true; // пока до фазы роста
+
+          const now = Date.now();
+          if (now < bettingEndTime) {
+            coefficientEl.textContent = '1.00';
+            const secsLeft = Math.ceil((bettingEndTime - now) / 1000);
+            showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
+          } else if (now >= bettingEndTime && now < crashTime) {
+            // сразу в фазу роста
+            actionBtn.textContent = 'Забрать';
+            actionBtn.classList.remove('start');
+            actionBtn.classList.add('cashout');
+            actionBtn.disabled = false;
+            showMessage('Раунд идёт... 🚀', '#333');
+            startDrawingCoefficient();
+          }
+        } catch (err) {
+          showMessage(err.message, 'red');
         }
-      } catch (err) {
-        showMessage(err.message, 'red');
-      }
-    });
+      } 
+      // Иначе пользователь уже поставил → «Забрать»
+      else {
+        hasCashedOut = true;
+        actionBtn.disabled = true;
 
-    // «Забрать» (cashout)
-    cashoutBtn.addEventListener('click', async () => {
-      if (!hasBet || hasCashedOut) return;
-      hasCashedOut = true;
-      cashoutBtn.disabled = true;
+        const coefToTake = parseFloat(coefficientEl.textContent);
+        try {
+          const resp = await fetch(`${BASE_URL}/crash/cashout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ coefficient: coefToTake })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || 'Ошибка при выплате');
+          }
 
-      const coefToTake = parseFloat(coefficientEl.textContent);
+          showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${coefToTake.toFixed(2)})`, 'green');
+          user.balance = data.newBalance;
+          balanceEl.textContent = user.balance;
 
-      try {
-        const resp = await fetch(`${BASE_URL}/crash/cashout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ coefficient: coefToTake })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Ошибка при выплате');
+          const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
+          const stData = await state.json();
+          renderPlayers(stData.players);
+        } catch (err) {
+          showMessage(err.message, 'red');
         }
-
-        showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${coefToTake.toFixed(2)})`, 'green');
-        user.balance = data.newBalance;
-        balanceEl.textContent = user.balance;
-
-        const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
-        const stData = await state.json();
-        renderPlayers(stData.players);
-      } catch (err) {
-        showMessage(err.message, 'red');
       }
     });
 
