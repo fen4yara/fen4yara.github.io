@@ -58,20 +58,28 @@ function updateUserBalance(username, newBalance) {
 
 // ======= регистрация / login / check-auth / logout =======
 app.post('/register', (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'Username is required' });
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
 
   const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
   try {
     const all = readUsers();
+
+    // Проверяем, зарегистрирован ли кто-то с этого IP
     if (all.find(u => u.ip === userIP)) {
       return res.status(400).json({ error: 'Регистрация с этого IP уже выполнена' });
     }
+
+    // Проверяем уникальность имени
     if (all.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
-    all.push({ username, balance: 1000, ip: userIP });
+
+    // Добавляем пользователя с ХЭШЕМ пароля
+    all.push({ username, passwordHash: password, balance: 1000, ip: userIP });
     writeUsers(all);
+
     res.json({ message: 'Регистрация успешна!' });
   } catch (err) {
     console.error(err);
@@ -80,11 +88,18 @@ app.post('/register', (req, res) => {
 });
 
 app.post('/login', (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'Username is required' });
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+
   try {
     const user = findUser(username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    // Сравниваем ХЭШИ паролей
+    if (user.passwordHash !== password) {
+      return res.status(401).json({ error: 'Неверный пароль' });
+    }
+
     req.session.user = { username: user.username };
     res.json({
       message: 'Аутентификация успешна',
@@ -103,10 +118,15 @@ app.get('/check-auth', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
+
   try {
     const user = findUser(req.session.user.username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-    res.json({ username: user.username, balance: user.balance });
+
+    res.json({
+      username: user.username,
+      balance: user.balance
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
@@ -124,6 +144,7 @@ app.post('/logout', (req, res) => {
   });
 });
 // ======= конец auth =======
+
 
 let roulettePlayers = [];    // текущая очередь: [{ username, bet, color }]
 let lastSpinPlayers = null;  // «снимок» очереди перед спином
