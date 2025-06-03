@@ -115,7 +115,7 @@
     const timerEl = document.getElementById('timer');
     const legendEl = document.getElementById('legend');
 
-    // Easing для анимации
+    // Easing для плавности анимации
     function easeOut(t) {
       return 1 - Math.pow(1 - t, 3);
     }
@@ -125,7 +125,7 @@
       messageEl.style.color = color;
     }
 
-    // 1) Отрисовать колесо по переданному списку list
+    // 1) Отрисовать колесо по списку list (каждый элемент: {username, bet, color})
     function drawWheelByList(list) {
       ctx.clearRect(0, 0, 300, 300);
       if (list.length === 0) return;
@@ -143,7 +143,7 @@
       renderLegend(list);
     }
 
-    // 2) Отрисовать легенду: цвет и имя каждого игрока
+    // 2) Отрисовать легенду (цвет и имя каждого игрока)
     function renderLegend(list) {
       legendEl.innerHTML = '';
       list.forEach(p => {
@@ -160,7 +160,7 @@
       });
     }
 
-    // 3) Запрашивать текущих игроков каждые 2 секунды
+    // 3) Запрашиваем текущих игроков и сразу рисуем, затем опрашиваем раз в 2 секунды
     async function fetchPlayersAndDraw() {
       try {
         const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
@@ -178,13 +178,13 @@
       }
     }
 
-    // 4) Запрашиваем у сервера новую метку nextSpin
+    // 4) Запрос к серверу /roulette/next-spin, чтобы узнать новую метку
     async function fetchNextSpin() {
       try {
         const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не удалось получить next-spin');
         const data = await resp.json();
-        // Если nextSpin не поменялось, ничего не делаем
+        // Если nextSpin не поменялось, не перезапускаем таймер
         if (data.nextSpin === nextSpinTimestamp) return;
         nextSpinTimestamp = data.nextSpin;
         startCountdown();
@@ -193,16 +193,15 @@
       }
     }
 
-    // 5) Запустить обратный отсчёт и дождаться момента спина
+    // 5) Запуск обратного отсчёта и момент запуска animateSpin()
     function startCountdown() {
-      // Очистка старого интервала
       if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
       }
 
       if (nextSpinTimestamp === null) {
-        // Пока нет второго игрока
+        // Ещё нет двух игроков
         countdownTextEl.textContent = 'Ожидание второго игрока…';
         timerEl.textContent = '';
         return;
@@ -217,7 +216,6 @@
         if (now >= nextSpinTimestamp) {
           clearInterval(countdownInterval);
           countdownInterval = null;
-          // Запускаем анимацию ровно один раз
           animateSpin();
         }
       }
@@ -225,17 +223,17 @@
       countdownInterval = setInterval(updateTimer, 200);
     }
 
-    // 6) Полный цикл анимации: запрашиваем результат, крутит колесо и показываем сумму выигрыша
+    // 6) Анимация спина: запрашиваем /roulette/result, рассчитываем угол и выводим сумму выигрыша
     async function animateSpin() {
       if (isAnimating) return;
       isAnimating = true;
 
-      // Забираем результат (snapshot участников + победитель + totalBet)
+      // 6.1) Сначала получаем результат ─ snapshot участников + победитель + totalBet
       let resultData;
       try {
         const r = await fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' });
         if (!r.ok) {
-          console.warn('Результат пока недоступен, повторю через 500 мс');
+          console.warn('Результат пока недоступен, повторяю через 500 мс');
           isAnimating = false;
           setTimeout(animateSpin, 500);
           return;
@@ -248,34 +246,35 @@
         return;
       }
 
-      const spinPlayers = resultData.players;
+      const spinPlayers = resultData.players;      // тот самый snapshot, по нему считали победителя
       const winnerUsername = resultData.winner;
-      const totalPot = resultData.totalBet; // сумма всех ставок
+      const totalPot = resultData.totalBet;        // полная сумма ставок (выигрыш)
 
       if (!spinPlayers || spinPlayers.length < 2) {
         showMessage('Недостаточно игроков для спина.', 'orange');
         isAnimating = false;
-        // Обновляем next-spin
-        fetchNextSpin();
+        fetchNextSpin(); // спросим новую метку
         return;
       }
 
       showMessage('Крутим…');
 
-      // Строим угловые отрезки для каждого игрока
+      // 6.2) Рассчитаем угловые отрезки для каждого участника
       const slices = computeSlices(spinPlayers);
       let targetSlice = slices.find(s => s.username === winnerUsername);
       if (!targetSlice) {
         targetSlice = slices[0];
       }
 
-      // Считаем угол, на который надо повернуть так, чтобы стрелка (−π/2)
-      // попала в середину победного отрезка
+      // 6.3) Найдём середину этого отрезка
       const midAngle = targetSlice.startAngle + (targetSlice.endAngle - targetSlice.startAngle) / 2;
+      // Наш canvas рисует от 0 радиан вправо, стрелка у нас «смотрит» вверх (−π/2).
+      // Чтобы стрелка попала точно в midAngle, нужен поворот: (3π/2 − midAngle) + K·2π
       const extraRotations = 4 * 2 * Math.PI;
       const currentRotation = 0;
       const finalRotation = extraRotations + (3 * Math.PI / 2) - midAngle;
 
+      // 6.4) Запускаем анимацию
       const spinDuration = 3000;
       const startTime = performance.now();
 
@@ -296,9 +295,10 @@
         if (t < 1) {
           requestAnimationFrame(frame);
         } else {
-          // Анимация завершена
+          // Анимация завершена ─ показываем победителя и сумму выигранных 🍬
           showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${totalPot} 🍬`, 'green');
-          // Обновляем баланс текущего игрока
+
+          // Обновляем баланс текущего пользователя
           fetch(`${BASE_URL}/check-auth`, { credentials: 'include' })
             .then(r2 => {
               if (!r2.ok) throw new Error('Не удалось обновить баланс');
@@ -311,7 +311,7 @@
             .catch(err => console.error(err))
             .finally(() => {
               isAnimating = false;
-              // После спина нужно получить новую метку
+              // После этого спросим новую метку
               fetchNextSpin();
             });
         }
@@ -320,7 +320,7 @@
       requestAnimationFrame(frame);
     }
 
-    // Помощник: вычисление угловых отрезков для каждого участника
+    // Помощник: вычисление угловых отрезков (startAngle, endAngle) для каждого {username, bet, color}
     function computeSlices(list) {
       const totalBet = list.reduce((s, p) => s + p.bet, 0);
       let acc = 0;
@@ -337,7 +337,7 @@
       });
     }
 
-    // 7) При загрузке страницы: проверяем авторизацию, получаем игроков и nextSpin
+    // 7) При загрузке страницы: проверяем, авторизован ли пользователь → получаем игроков и nextSpin
     window.addEventListener('DOMContentLoaded', async () => {
       try {
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
@@ -349,7 +349,7 @@
         await fetchPlayersAndDraw();
         setInterval(fetchPlayersAndDraw, 2000);
 
-        // Сразу получить nextSpin и запустить опрос nextSpin каждые 2 секунды
+        // Сразу получить текущую метку nextSpin и запустить опрос каждые 2 секунды
         await fetchNextSpin();
         setInterval(fetchNextSpin, 2000);
       } catch (err) {
@@ -358,7 +358,7 @@
       }
     });
 
-    // 8) Нажатие «Присоединиться»: добавляем ставку и обновляем nextSpin у всех клиентов
+    // 8) Нажатие «Присоединиться»: добавляем ставку, получаем ответ от /join, сразу запускаем таймер
     joinBtn.addEventListener('click', async () => {
       const betValue = parseInt(document.getElementById('bet').value);
       if (!betValue || betValue <= 0) {
@@ -380,11 +380,12 @@
         if (!resp.ok) {
           throw new Error(data.error || 'Ошибка при join');
         }
-        // Обновляем локальный список и колесо
+
+        // 8.1) Обновляем локальный список и сразу рисуем колесо в режиме ожидания
         players = data.players;
         drawWheelByList(players);
 
-        // Обновляем баланс
+        // 8.2) Обновляем баланс
         const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (check.ok) {
           const upd = await check.json();
@@ -392,8 +393,10 @@
           balanceEl.textContent = user.balance;
         }
         showMessage('Вы в игре. Ждём спина...', '#333');
-        // Сразу получить новый nextSpin (теперь сервер запустит таймер)
-        fetchNextSpin();
+
+        // 8.3) Теперь сервер вернул в data.nextSpin метку. Сразу используем её:
+        nextSpinTimestamp = data.nextSpin;
+        startCountdown();
       } catch (err) {
         showMessage(err.message, 'red');
       }
