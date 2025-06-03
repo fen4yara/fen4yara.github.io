@@ -1,57 +1,74 @@
 [
   {
     "username": "имиль",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 12333,
     "ip": "51.158.233.190"
   },
   {
     "username": "гей",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 647,
     "ip": "138.199.220.247"
   },
   {
     "username": "соль",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 1689,
     "ip": "176.59.111.62"
   },
   {
     "username": "кака",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 7817,
     "ip": "176.52.99.181"
   },
   {
     "username": "я",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 12172,
     "ip": "45.88.200.225"
   },
   {
     "username": "дудос",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 96929,
     "ip": "79.127.178.32"
   },
   {
     "username": "детское порно",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 1678,
     "ip": "5.101.16.197"
   },
   {
     "username": "tttt",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 649,
     "ip": "178.207.93.181"
   },
   {
     "username": "мамут рахал",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 3233,
     "ip": "145.255.10.112"
   },
   {
     "username": "Соси хуй",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 30295,
     "ip": "85.140.7.230"
   },
   {
     "username": "а что",
+    "passwordHash": "5e7dcb5b8b55555bb0962327c595e3f0d3b7f3be9c7bdbecb1af07f0a0eae6a4",
     "balance": 1012,
     "ip": "91.245.42.105"
+  },
+  {
+    "username": "fefyra",
+    "passwordHash": "0b319c91e9359f9ba6d0a91e850f3abb5a2684b9156aaea03af617c74fb47866",
+    "balance": 1000,
+    "ip": "178.176.83.40"
   }
 ]
