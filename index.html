@@ -13,6 +13,7 @@
         <h1>Вход</h1>
         <form id="loginForm">
             <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
+            <input type="password" id="loginPassword" placeholder="Пароль" required />
             <button type="submit">Войти</button>
         </form>
         <p>Нет аккаунта? <a href="registration.html">Регистрация</a></p>
@@ -21,42 +22,44 @@
     <script>
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
 
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const username = document.getElementById('loginUsername').value.trim();
-      if (!username) return alert('Введите имя!');
+    async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
 
-      try {
-        const response = await fetch(`${BASE_URL}/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ username }),
-          credentials: 'include'
-        });
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!username || !password) return alert('Введите имя и пароль!');
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Ошибка входа');
-        }
+  const hashedPassword = await hashPassword(password);
 
-        const data = await response.json();
-        alert(data.message);
-        // Проверяем сессию перед редиректом
-        const sessionCheck = await fetch(`${BASE_URL}/check-auth`, {
-          credentials: 'include'
-        });
-        
-        if (sessionCheck.ok) {
-          window.location.href = 'mainPage.html';
-        } else {
-          throw new Error('Сессия не создана');
-        }
-      } catch (err) {
-        alert('Ошибка: ' + err.message);
-      }
+  try {
+    const response = await fetch(`${BASE_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: hashedPassword }),
+      credentials: 'include'
     });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Ошибка входа');
+    }
+
+    const data = await response.json();
+    alert(data.message);
+    window.location.href = 'mainPage.html';
+  } catch (err) {
+    alert('Ошибка: ' + err.message);
+  }
+});
+
     </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
