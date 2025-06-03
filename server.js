@@ -75,7 +75,7 @@ app.post('/register', (req, res) => {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
 
-    // Хэшируем пароль (клиент уже передаёт SHA-256‐хэш)
+    // Клиент уже передаёт SHA-256‐хэш
     const passwordHash = password;
 
     all.push({ username, passwordHash, balance: 1000, ip: userIP });
@@ -172,7 +172,7 @@ function getRandomColor() {
 }
 
 /**
- * Запускает спин. Если игроков < 2 — просто очищает очередь без результата.
+ * Запускает один спин. Если игроков < 2 — просто очищает очередь без результата.
  * Иначе: формирует lastSpinPlayers, выбирает победителя, обновляет его баланс, сохраняет lastSpinResult.
  */
 function runSpin() {
@@ -184,7 +184,7 @@ function runSpin() {
     lastSpinResult = null;
     lastSpinPlayers = null;
   } else {
-    // Делаем «снимок» очереди для анимации
+    // Делаем «снимок» очереди
     lastSpinPlayers = roulettePlayers.map((p) => ({ ...p }));
 
     const totalBet = roulettePlayers.reduce((sum, p) => sum + p.bet, 0);
@@ -212,7 +212,7 @@ function runSpin() {
       winner: winnerEntry.username,
       totalBet: totalBet,
       timestamp: now,
-      players: lastSpinPlayers // здесь snapshot участников этого спина
+      players: lastSpinPlayers // здесь snapshot
     };
 
     // Очищаем очередь
@@ -223,26 +223,27 @@ function runSpin() {
   nextSpin = null;
   spinTimeoutId = null;
 
-  // Если после спина снова ≥ 2 игроков — планируем новый спин
+  // Если снова ≥ 2 игроков, планируем новый спин
   if (roulettePlayers.length >= 2) {
     nextSpin = Date.now() + spinInterval;
     spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 }
 
-// Первый «отсчёт» запускается только когда появляется второй игрок. Он устанавливается внутри /roulette/join.
+// Первый спин запускается внутри /roulette/join при появлении второго игрока.
 
-// ========== ENDPOINTS ==========
+// ========== ЭНДПОЙНТЫ ==========
 
-// Вернуть список текущих игроков
+// 1) Вернуть список текущих игроков + nextSpin
 app.get('/roulette/players', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  res.json({ players: roulettePlayers });
+  // Возвращаем сразу массив игроков и актуальную метку nextSpin (null или число ms)
+  res.json({ players: roulettePlayers, nextSpin });
 });
 
-// Игрок присоединяется к спину
+// 2) Игрок присоединяется к спину
 app.post('/roulette/join', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -263,7 +264,7 @@ app.post('/roulette/join', (req, res) => {
   // Снимаем баланс
   updateUserBalance(username, user.balance - bet);
 
-  // Если игрок уже в очереди — наращиваем ставку, иначе добавляем новый объект
+  // Если игрок уже в очереди — увеличиваем его ставку, иначе добавляем
   const existing = roulettePlayers.find((p) => p.username === username);
   if (existing) {
     existing.bet += bet;
@@ -271,29 +272,28 @@ app.post('/roulette/join', (req, res) => {
     roulettePlayers.push({ username, bet, color: getRandomColor() });
   }
 
-  // Если ровно 2 игрока и ещё не запланирован спин — запускаем первый отсчёт
+  // Если ровно 2 игрока и ещё нет запланированного спина, запускаем первый отсчёт
   if (roulettePlayers.length === 2 && nextSpin === null) {
     nextSpin = Date.now() + spinInterval;
     spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 
-  // В ответ сразу отдадим players и актуальную метку nextSpin
+  // В ответ возвращаем игроков + текущую метку nextSpin
   res.json({
     players: roulettePlayers,
-    nextSpin: nextSpin // null или число миллисекунд
+    nextSpin: nextSpin // null или число (ms)
   });
 });
 
-// Следующая метка времени для спина
+// 3) Получить только nextSpin
 app.get('/roulette/next-spin', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  // Если nextSpin === null, возвращаем null (ждём второго игрока)
   res.json({ nextSpin });
 });
 
-// Последний результат спина (winner, totalBet, timestamp, players)
+// 4) Получить последний результат спина
 app.get('/roulette/result', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -377,7 +377,7 @@ app.post('/crash/cashout', (req, res) => {
   res.json({ winnings, newBalance: findUser(username).balance });
 });
 
-// === По умолчанию — отдаем login.html на корень ===
+// === По умолчанию — отдаём login.html на корень ===
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
