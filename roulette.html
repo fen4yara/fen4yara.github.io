@@ -3,34 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🎡 Рулетка</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>🎡 Адаптивная Рулетка</title>
   <style>
+    /* --- Сама обёртка колеса (адаптивный квадрат) --- */
     .wheel {
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      border: 10px solid #333;
+      width: 90vw;              /* занимает до 90% ширины экрана */
+      max-width: 400px;         /* но не больше 400px */
+      aspect-ratio: 1 / 1;      /* всегда квадрат */
       margin: 20px auto;
       position: relative;
+      border: 10px solid #333;  /* рамка колеса */
+      border-radius: 50%;
       overflow: hidden;
+      box-sizing: border-box;   /* чтобы рамка не «вылазила» за пределы */
     }
+
+    /* --- Canvas внутри колеса растягивается на 100% контейнера --- */
     .wheel canvas {
       width: 100%;
       height: 100%;
       display: block;
     }
+
+    /* --- Адаптивная стрелка --- */
     .pointer {
       position: absolute;
-      top: -10px;
+      top: -5%;                /* чуть выступает над рамкой */
       left: 50%;
       transform: translateX(-50%);
       width: 0;
       height: 0;
-      border-left: 20px solid transparent;
-      border-right: 20px solid transparent;
-      border-bottom: 30px solid red;
+      border-left: 7% solid transparent;   /* 7% от ширины контейнера */
+      border-right: 7% solid transparent;  /* 7% от ширины контейнера */
+      border-bottom: 12% solid red;        /* 12% от ширины контейнера */
+      /* таким образом стрелка автоматически масштабируется вместе с .wheel */
+      z-index: 10;            /* поверх холста */
     }
+
+    /* --- Блок с обратным отсчётом и сообщениями --- */
     #message {
       font-weight: bold;
       margin-top: 10px;
@@ -51,8 +61,10 @@
       display: inline;
       margin-left: 5px;
     }
+
+    /* --- Легенда --- */
     #legend {
-      max-width: 300px;
+      max-width: 400px;
       margin: 10px auto;
       font-size: 0.9rem;
       text-align: left;
@@ -72,7 +84,7 @@
 </head>
 <body>
   <main>
-    <h1>🎡 Рулетка</h1>
+    <h1>🎡 Адаптивная Рулетка</h1>
     <p>Баланс: <span id="balance">...</span> 🍬</p>
 
     <div>
@@ -85,14 +97,12 @@
       <span id="timer"></span>
     </div>
 
-    <div class="wheel">
-      <canvas id="canvas" width="300" height="300"></canvas>
+    <div class="wheel" id="wheel-container">
+      <canvas id="canvas"></canvas>
       <div class="pointer"></div>
     </div>
 
-    <!-- Легенда: для каждого участника цвет и ставка -->
     <div id="legend"></div>
-
     <p id="message"></p>
     <button onclick="window.location.href='mainPage.html'">⬅️ Назад</button>
   </main>
@@ -114,8 +124,9 @@
     const countdownTextEl = document.getElementById('countdown-text');
     const timerEl = document.getElementById('timer');
     const legendEl = document.getElementById('legend');
+    const wheelContainer = document.getElementById('wheel-container');
 
-    // Плавность анимации
+    // Плавная функция ease-out
     function easeOut(t) {
       return 1 - Math.pow(1 - t, 3);
     }
@@ -125,25 +136,43 @@
       messageEl.style.color = color;
     }
 
-    // Рисуем колесо
+    // Перед рисованием колеса мы должны всегда подстраивать внутреннее разрешение canvas
+    function resizeCanvasToContainer() {
+      const rect = wheelContainer.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      // Если сейчас нет анимации, просто перерисуем «ожидающее» состояние:
+      if (!isAnimating) {
+        drawWheelByList(players);
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      resizeCanvasToContainer();
+    });
+
+    // 1) Рисуем колесо по списку list
     function drawWheelByList(list) {
-      ctx.clearRect(0, 0, 300, 300);
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
       if (list.length === 0) return;
+
       const totalBet = list.reduce((s, p) => s + p.bet, 0);
       let startAngle = 0;
       list.forEach(p => {
-        const angle = (p.bet / totalBet) * 2 * Math.PI;
+        const slice = (p.bet / totalBet) * 2 * Math.PI;
         ctx.beginPath();
-        ctx.moveTo(150, 150);
-        ctx.arc(150, 150, 150, startAngle, startAngle + angle);
+        ctx.moveTo(width / 2, height / 2);
+        ctx.arc(width / 2, height / 2, width / 2, startAngle, startAngle + slice);
         ctx.fillStyle = p.color;
         ctx.fill();
-        startAngle += angle;
+        startAngle += slice;
       });
       renderLegend(list);
     }
 
-    // Рисуем легенду
+    // 2) Рисуем легенду
     function renderLegend(list) {
       legendEl.innerHTML = '';
       list.forEach(p => {
@@ -160,7 +189,7 @@
       });
     }
 
-    // 1) Получаем игроков + nextSpin + serverTime (каждые 500 мс)
+    // 3) Получаем игроков + nextSpin + serverTime (каждые 500 мс)
     async function fetchPlayersAndDraw() {
       try {
         const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
@@ -172,7 +201,6 @@
         players = data.players;
         drawWheelByList(players);
 
-        // Пересчитываем локальную метку nextSpinTimestamp:
         if (data.nextSpin !== null) {
           const offset = Date.now() - data.serverTime;
           const localNext = data.nextSpin + offset;
@@ -181,7 +209,6 @@
             startCountdown();
           }
         } else if (nextSpinTimestamp !== null) {
-          // Если сервер вдруг вернул null, сбрасываем локально
           nextSpinTimestamp = null;
           startCountdown();
         }
@@ -190,7 +217,7 @@
       }
     }
 
-    // 2) Функция опроса /next-spin (дублирует логику, но может пригодиться)
+    // 4) По-прежнему можем опрашивать /next-spin (необязательно)
     async function fetchNextSpin() {
       try {
         const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
@@ -212,7 +239,7 @@
       }
     }
 
-    // 3) Запускаем обратный отсчёт, один раз вызываем animateSpin()
+    // 5) Запускаем обратный отсчёт, при достижении нуля — вызываем animateSpin()
     function startCountdown() {
       if (countdownInterval) {
         clearInterval(countdownInterval);
@@ -242,7 +269,7 @@
       countdownInterval = setInterval(updateTimer, 200);
     }
 
-    // 4) Анимация спина
+    // 6) Анимация спина
     async function animateSpin() {
       if (isAnimating) return;
       isAnimating = true;
@@ -294,10 +321,10 @@
         const currentAngle = currentRotation + (finalRotation - currentRotation) * eased;
 
         ctx.save();
-        ctx.clearRect(0, 0, 300, 300);
-        ctx.translate(150, 150);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate(currentAngle);
-        ctx.translate(-150, -150);
+        ctx.translate(-canvas.width / 2, -canvas.height / 2);
         drawWheelByList(spinPlayers);
         ctx.restore();
 
@@ -340,14 +367,19 @@
       });
     }
 
-    // 5) При загрузке страницы сразу получаем игроков + nextSpin + serverTime
+    // 7) При загрузке страницы:
     window.addEventListener('DOMContentLoaded', async () => {
       try {
+        // Сначала проверяем авторизацию
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
         balanceEl.textContent = user.balance;
 
+        // Подгоняем canvas под текущий размер контейнера
+        resizeCanvasToContainer();
+
+        // Запускаем быстрый опрос (500 мс) игроков и nextSpin
         await fetchPlayersAndDraw();
         setInterval(fetchPlayersAndDraw, 500);
         setInterval(fetchNextSpin, 500);
@@ -357,7 +389,7 @@
       }
     });
 
-    // 6) При клике «Присоединиться»
+    // 8) Обработчик «Присоединиться»
     joinBtn.addEventListener('click', async () => {
       const betValue = parseInt(document.getElementById('bet').value);
       if (!betValue || betValue <= 0) {
@@ -391,7 +423,6 @@
         }
         showMessage('Вы в игре. Ждём спина...', '#333');
 
-        // Теперь корректно рассчитываем локальную метку для отсчёта
         if (data.nextSpin !== null) {
           const offset = Date.now() - data.serverTime;
           nextSpinTimestamp = data.nextSpin + offset;
