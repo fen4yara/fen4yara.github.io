@@ -230,7 +230,7 @@ function runSpin() {
   }
 }
 
-// Первый «отсчёт» запускается только когда появляется второй игрок. Он устанавливается в /roulette/join.
+// Первый «отсчёт» запускается только когда появляется второй игрок. Он устанавливается внутри /roulette/join.
 
 // ========== ENDPOINTS ==========
 
@@ -277,7 +277,11 @@ app.post('/roulette/join', (req, res) => {
     spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 
-  res.json({ players: roulettePlayers });
+  // В ответ сразу отдадим players и актуальную метку nextSpin
+  res.json({
+    players: roulettePlayers,
+    nextSpin: nextSpin // null или число миллисекунд
+  });
 });
 
 // Следующая метка времени для спина
