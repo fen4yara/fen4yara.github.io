@@ -123,6 +123,7 @@
       position: relative;
       height: 300px;
       margin-top: 20px;
+      background: #fff;
     }
   </style>
 </head>
@@ -132,6 +133,11 @@
   <div class="balance">
     Баланс: <span id="balance">...</span> 🍬
   </div>
+
+    <div id="chartContainer">
+      <canvas id="crashChart"></canvas>
+    </div>
+
 
   <div class="crash-area">
     <label for="bet">Ставка:</label>
@@ -146,9 +152,6 @@
     <p id="message"></p>
 
 <!-- График -->
-    <div id="chartContainer">
-      <canvas id="crashChart"></canvas>
-    </div>
 
     <div class="players-list">
       <h3>Участники раунда:</h3>
