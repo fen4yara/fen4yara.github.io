@@ -123,6 +123,7 @@
 </head>
 <body>
   <h1>🚀 Глобальный Краш</h1>
+
   <div class="balance">
     Баланс: <span id="balance">...</span> 🍬
   </div>
@@ -142,7 +143,7 @@
     <div class="players-list">
       <h3>Участники раунда:</h3>
       <div id="playersContainer">
-        <!-- Здесь появятся участники: цвет • юзер • ставка • cashedOut? -->
+        <!-- Здесь покажем участников -->
       </div>
     </div>
   </div>
@@ -151,7 +152,7 @@
     <h2>История последних 5 раундов</h2>
     <button id="refreshHistory">Обновить историю</button>
     <ul class="history-list" id="historyList">
-      <!-- Здесь появятся 5 элементов истории -->
+      <!-- Здесь история -->
     </ul>
   </div>
 
@@ -163,7 +164,7 @@
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
 
     let user = null;
-    let intervalId = null;
+    let clientTimerId = null;
 
     const balanceEl = document.getElementById('balance');
     const coefficientEl = document.getElementById('coefficient');
@@ -175,15 +176,12 @@
     const historyList = document.getElementById('historyList');
     const refreshHistoryBtn = document.getElementById('refreshHistory');
 
-    // Переменные состояния для «краша»
-    let crashStartTime = null;
+    let bettingEndTime = null;
+    let realStartTime = null;
     let crashEnded = true;
-    let clientTimerId = null;
-    let localCoefficient = 1.0;
-    let hasBet = false;       // сделал ли пользователь ставку в этом раунде
-    let hasCashedOut = false; // успел ли пользователь забрать
+    let hasBet = false;
+    let hasCashedOut = false;
 
-    // 1) При загрузке: проверяем авторизацию и баланс
     window.addEventListener('DOMContentLoaded', async () => {
       try {
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
@@ -191,10 +189,7 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
 
-        // Сразу загрузим состояние раунда
         await fetchCrashState();
-
-        // И загрузим историю
         loadHistory();
       } catch (err) {
         alert('Пожалуйста, сначала войдите.');
@@ -207,7 +202,7 @@
       messageEl.style.color = color;
     }
 
-    // Обновляем UI-список участников
+    // Отрисовка участников
     function renderPlayers(players) {
       playersContainer.innerHTML = '';
       players.forEach((p) => {
@@ -217,7 +212,7 @@
         colorDot.className = 'player-color';
         colorDot.style.background = p.color;
         const text = document.createElement('span');
-        text.textContent = ` ${p.username} — ${p.bet} 🍬`;
+        text.textContent = `${p.username} — ${p.bet} 🍬`;
         if (p.cashedOut) {
           text.textContent += ` → забрал(а) x${p.cashoutCoef.toFixed(2)} (выигрыш ${p.winnings} 🍬)`;
         }
@@ -226,25 +221,22 @@
       });
     }
 
-    // Получить текущее состояние раунда с сервера
+    // GET /crash/state
     async function fetchCrashState() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка при получении состояния');
 
-        // Обновляем список участников
         renderPlayers(data.players);
-
-        // Обновляем флаги
-        crashStartTime = data.startTime;
+        bettingEndTime = data.bettingEndTime;
+        realStartTime = data.realStartTime;
         crashEnded = data.ended;
 
-        // Если раунд не начат (ended = true), сбрасываем UI
-        if (crashEnded || !crashStartTime) {
+        if (crashEnded || !realStartTime) {
           clearInterval(clientTimerId);
+          clientTimerId = null;
           coefficientEl.textContent = '1.00';
-          localCoefficient = 1.0;
           startBtn.disabled = false;
           cashoutBtn.disabled = true;
           betInputEl.disabled = false;
@@ -254,59 +246,78 @@
           return;
         }
 
-        // Если раунд запущен, блокируем UI-элементы «Начать»
+        // Если мы сейчас в «зоне ставок» (лево от realStartTime)
+        const now = Date.now();
+        if (now < realStartTime) {
+          clearInterval(clientTimerId);
+          clientTimerId = null;
+          coefficientEl.textContent = '1.00';
+          showMessage(`Фаза ставок, ещё ${Math.ceil((realStartTime - now) / 1000)} сек`, '#333');
+          startBtn.disabled = true;
+          betInputEl.disabled = true;
+          cashoutBtn.disabled = true;
+          return;
+        }
+
+        // Если мы уже в фазе «коэффициента» (realStartTime ≤ now < crash)
         startBtn.disabled = true;
         betInputEl.disabled = true;
         showMessage('Раунд идёт... 🚀', '#333');
 
-        // Запустим clientTimerId (если ещё не запущен) для анимации коэффициента
         if (!clientTimerId) {
-          clientTimerId = setInterval(() => {
-            drawCoefficient();
-          }, 100);
+          clientTimerId = setInterval(drawCoefficient, 100);
         }
+
       } catch (err) {
         console.error(err);
         showMessage(err.message, 'red');
       }
     }
 
-    // Функция, которая рисует текущий коэффициент, основываясь на serverTime и crashStartTime
+    // Отрисовка текущего коэффициента
     async function drawCoefficient() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка при получении состояния');
 
-        // Если раунд уже закончился, останавливаем анимацию
+        // Если раунд завершился, показываем краш
         if (data.ended) {
           clearInterval(clientTimerId);
           clientTimerId = null;
-          // Покажем точный коэффициент краша:
-          coefficientEl.textContent = data.crashPoint.toFixed(2);
-          showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
-          // Если пользователь ставил, нужно ему сбросить UI-кнопки
+          // crashPoint может быть null, если раунд вообще не запускался
+          if (data.crashPoint !== null) {
+            coefficientEl.textContent = data.crashPoint.toFixed(2);
+            showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
+          } else {
+            coefficientEl.textContent = '1.00';
+            showMessage('Ждём нового раунда', '#333');
+          }
           startBtn.disabled = false;
           cashoutBtn.disabled = true;
           betInputEl.disabled = false;
           hasBet = false;
           hasCashedOut = false;
-          // Обновим баланс (чтобы, если кто-то победил, у всех отображалось корректно):
-          await updateBalanceInUI();
-          // Перерисуем участников (чтобы сразу увидеть, кто куда успел забрать и кто проиграл)
           renderPlayers(data.players);
+          await updateBalanceInUI();
           return;
         }
 
-        // Ещё идёт раунд → считаем коэффициент
+        // Если сейчас ещё зона ставок
         const now = data.serverTime;
-        const elapsed = (now - data.startTime) / 1000; // в секундах
-        // Линейный рост: coef = 1 + elapsed * CRASH_GROWTH_SPEED
-        const coef = 1 + elapsed * 0.2;
-        localCoefficient = coef;
-        coefficientEl.textContent = coef.toFixed(2);
+        if (now < data.realStartTime) {
+          coefficientEl.textContent = '1.00';
+          showMessage(`Фаза ставок, ещё ${Math.ceil((data.realStartTime - now) / 1000)} сек`, '#333');
+          startBtn.disabled = true;
+          betInputEl.disabled = true;
+          cashoutBtn.disabled = true;
+          return;
+        }
 
-        // Покажем список участников (чтобы видели, если кто-то зашёл или забрался):
+        // Фаза роста коэффициента
+        const elapsed = (now - data.realStartTime) / 1000; // секунды после старта
+        const coef = 1 + elapsed * 0.2; // CRASH_GROWTH_SPEED = 0.2
+        coefficientEl.textContent = coef.toFixed(2);
         renderPlayers(data.players);
 
       } catch (err) {
@@ -315,7 +326,6 @@
       }
     }
 
-    // Обновить баланс в UI
     async function updateBalanceInUI() {
       try {
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
@@ -323,11 +333,11 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
       } catch {
-        // никто не мешает
+        // ничего
       }
     }
 
-    // Нажали «Начать» (делаем join)
+    // Нажали «Начать» (join)
     startBtn.addEventListener('click', async () => {
       const betValue = parseInt(betInputEl.value);
       if (!betValue || betValue <= 0) {
@@ -351,42 +361,42 @@
           throw new Error(data.error || 'Ошибка при ставке');
         }
 
-        // Ставка принята: сервер уже снял сумму, обновим баланс
+        // Баланс уже списан
         user.balance -= betValue;
         balanceEl.textContent = user.balance;
 
-        // Обновляем список участников и запускаем анимацию
         renderPlayers(data.players);
-        crashStartTime = data.startTime;
+        bettingEndTime = data.bettingEndTime;
+        realStartTime = data.realStartTime;
         crashEnded = data.ended;
 
         startBtn.disabled = true;
-        cashoutBtn.disabled = false;
         betInputEl.disabled = true;
         hasBet = true;
         hasCashedOut = false;
-        showMessage('Подождите, раунд начался! 🚀', '#333');
 
-        // Запускаем клиентский таймер, если он ещё не запущен
-        if (!clientTimerId) {
-          clientTimerId = setInterval(() => {
-            drawCoefficient();
-          }, 100);
+        // Если мы ещё в зоне ставок, просто ждем. Потом drawCoefficient включится автоматически.
+        const now = Date.now();
+        if (now < realStartTime) {
+          coefficientEl.textContent = '1.00';
+          showMessage(`Фаза ставок, ещё ${Math.ceil((realStartTime - now) / 1000)} сек`, '#333');
+        } else {
+          // Если сразу перешли в фазу роста (маловероятно), запускаем таймер
+          if (!clientTimerId) {
+            clientTimerId = setInterval(drawCoefficient, 100);
+          }
         }
-
       } catch (err) {
         showMessage(err.message, 'red');
       }
     });
 
-    // Нажали «Забрать»
+    // Нажали «Забрать» (cashout)
     cashoutBtn.addEventListener('click', async () => {
       if (!hasBet || hasCashedOut) return;
-
       hasCashedOut = true;
       cashoutBtn.disabled = true;
 
-      // Берём текущее значение локального коэффициента (не больше real crashPoint, т.к. drawCoefficient проверяет)
       const coefToTake = parseFloat(coefficientEl.textContent);
 
       try {
@@ -401,39 +411,34 @@
           throw new Error(data.error || 'Ошибка при выплате');
         }
 
-        // Сервер вернул { winnings, newBalance }
         showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${coefToTake.toFixed(2)})`, 'green');
         user.balance = data.newBalance;
         balanceEl.textContent = user.balance;
 
-        // Обновляем участников (чтобы сразу увидеть, что мы помечены как cashedOut):
         const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
         const stData = await state.json();
         renderPlayers(stData.players);
-
       } catch (err) {
         showMessage(err.message, 'red');
       }
     });
 
-    // Обновляем историю (GET /crash/history)
+    // GET /crash/history
     async function loadHistory() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/history`, { credentials: 'include' });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка при загрузке истории');
 
-        // data = массив из { timestamp, crashPoint, totalBet, players: [...] }
         historyList.innerHTML = '';
         data.forEach((round) => {
           const li = document.createElement('li');
           li.className = 'history-item';
           const date = new Date(round.timestamp);
           const header = document.createElement('div');
-          header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong>: Расчёт х2: <em>${round.crashPoint.toFixed(2)}</em>, общий пул: ${round.totalBet} 🍬`;
+          header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet} 🍬`;
           li.append(header);
 
-          // Список участников:
           const subUl = document.createElement('ul');
           subUl.className = 'history-players';
           round.players.forEach((p) => {
