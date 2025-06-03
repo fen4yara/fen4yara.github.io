@@ -308,19 +308,20 @@ app.get('/roulette/result', (req, res) => {
  * - crashHistory держит последние 5 раундов.
  */
 
-const BET_DELAY = 10 * 1000;         // 10 сек фаза ставок
-const CRASH_GROWTH_SPEED = 0.2;      // coef = 1 + elapsedSec * 0.2
+const BET_DELAY    = 10 * 1000;    // 10 сек фаза ставок
+const BASE_SPEED   = 0.1;          // базовая скорость (в 1/sec)
+const ACCEL        = 0.02;         // ускорение (в 1/sec²)
 
 let currentCrash = {
   players: [],        // { username, bet, color, cashedOut, cashoutCoef, winnings }
-  bettingEndTime: null, // timestamp (ms), когда фаза ставок заканчивается
-  crashTime: null,    // timestamp (ms), когда случится краш
-  crashPoint: null,   // число > 1.0
-  ended: true,        // true = раунд не идёт, false = фаза ставок или рост
-  timerId: null       // id setTimeout, чтобы clearTimeout
+  bettingEndTime: null, // когда завершается фаза ставок (timestamp)
+  crashTime: null,    // когда наступит краш (timestamp)
+  crashPoint: null,   // целевой коэффициент
+  ended: true,        // true – раунд не идёт, false – фаза ставок или рост
+  timerId: null       // setTimeout ID, чтобы можно было clearTimeout
 };
 
-let crashHistory = []; // массив последних 5 раундов: 
+let crashHistory = []; // последние 5 раундов: 
 // { timestamp, crashPoint, totalBet, players: [ { username, bet, cashedOut, cashoutCoef, winnings, color } ] }
 
 
@@ -355,11 +356,11 @@ function generateCrashPoint() {
  */
 function endCrashRound() {
   if (currentCrash.ended) return;
+
   const now = Date.now();
   const timestamp = now;
   const totalBet = currentCrash.players.reduce((sum, p) => sum + p.bet, 0);
 
-  // Сохраняем snapshot участников
   const snapshot = currentCrash.players.map((p) => ({
     username: p.username,
     bet: p.bet,
@@ -389,18 +390,32 @@ function endCrashRound() {
 }
 
 /**
- * Запускает новый раунд: 
- *   - генерим crashPoint
- *   - рассчитываем bettingEndTime и crashTime
- *   - ставим таймер endCrashRound на (bettingEndTime – now) + timeToCrashMs
+ * Запускает новый раунд:
+ * 1) Генерация crashPoint.
+ * 2) Вычисление T (в секундах), через которое coef = crashPoint:
+ *       0.5*ACCEL*T² + BASE_SPEED*T + 1 - crashPoint = 0
+ *    Решаем для T, берём положительный корень.
+ * 3) Устанавливаем bettingEndTime = now + BET_DELAY.
+ *    crashTime = bettingEndTime + T*1000.
+ * 4) Ставим таймер setTimeout(endCrashRound, BET_DELAY + T*1000).
  */
 function startNewCrashRound() {
   const now = Date.now();
-  currentCrash.crashPoint = generateCrashPoint();
+  const cp = generateCrashPoint();
+  currentCrash.crashPoint = cp;
   currentCrash.bettingEndTime = now + BET_DELAY;
 
-  // Сколько миллисекунд займёт рост от 1.00 до crashPoint:
-  const timeToCrashMs = Math.floor(((currentCrash.crashPoint - 1) / CRASH_GROWTH_SPEED) * 1000);
+  // Решаем квадратичное уравнение: 0.5·a·T² + b·T + (1 - cp) = 0, где b = BASE_SPEED, a = ACCEL
+  const a = ACCEL / 2.0;
+  const b = BASE_SPEED;
+  const c = 1 - cp;
+
+  const discriminant = b*b - 4*a*c;
+  // Гарантированно discriminant ≥ 0, т.к. cp > 1, ACCEL > 0.
+  const sqrtD = Math.sqrt(discriminant);
+  const T = (-b + sqrtD) / (2*a); // положительный корень (T > 0)
+
+  const timeToCrashMs = Math.floor(T * 1000);
   currentCrash.crashTime = currentCrash.bettingEndTime + timeToCrashMs;
 
   const totalDuration = BET_DELAY + timeToCrashMs;
@@ -425,7 +440,7 @@ app.get('/crash/state', (req, res) => {
       cashoutCoef: p.cashoutCoef,
       winnings: p.winnings
     })),
-    bettingEndTime: currentCrash.bettingEndTime, 
+    bettingEndTime: currentCrash.bettingEndTime,
     crashTime: currentCrash.crashTime,
     crashPoint: currentCrash.ended ? currentCrash.crashPoint : null,
     ended: currentCrash.ended,
@@ -453,12 +468,12 @@ app.post('/crash/join', (req, res) => {
 
   const now = Date.now();
 
-  // Если раунд не идёт, запускаем новый
+  // Если раунд не идёт – запускаем новый
   if (currentCrash.ended) {
     startNewCrashRound();
   }
 
-  // Если сейчас уже позже окончания фазы ставок, отказываем
+  // Если уже позже, чем конец фазы ставок – отказ
   if (now > currentCrash.bettingEndTime) {
     return res.status(400).json({ error: 'Зона ставок закрыта, дождитесь следующего раунда' });
   }
@@ -531,7 +546,7 @@ app.post('/crash/cashout', (req, res) => {
     return res.status(400).json({ error: 'Уже крашнулся, нет выплат' });
   }
 
-  // Ищем участника
+  // Находим участника
   const participant = currentCrash.players.find((p) => p.username === username);
   if (!participant) {
     return res.status(400).json({ error: 'Вы не участвуете в текущем раунде' });
@@ -540,7 +555,7 @@ app.post('/crash/cashout', (req, res) => {
     return res.status(400).json({ error: 'Вы уже забрали' });
   }
 
-  // Проверяем: если заявленный coefficient ≥ crashPoint, он опоздал
+  // Если заявленный коэффициент ≥ crashPoint – опоздал
   if (coefficient >= currentCrash.crashPoint) {
     participant.cashedOut = false;
     participant.cashoutCoef = null;
@@ -567,13 +582,4 @@ app.get('/crash/history', (req, res) => {
     return res.status(401).json({ error: 'Не авторизован' });
   }
   res.json(crashHistory);
-});
-
-// === По умолчанию — отдаём login.html на корень ===
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
