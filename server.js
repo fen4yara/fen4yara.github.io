@@ -18,12 +18,14 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use(session({
-  secret: 'mySecretKey',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false }
-}));
+app.use(
+  session({
+    secret: 'mySecretKey',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }
+  })
+);
 app.use(express.static(path.join(__dirname)));
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
@@ -43,11 +45,11 @@ function writeUsers(arr) {
 }
 function findUser(username) {
   const users = readUsers();
-  return users.find(u => u.username === username);
+  return users.find((u) => u.username === username);
 }
 function updateUserBalance(username, newBalance) {
   const users = readUsers();
-  const idx = users.findIndex(u => u.username === username);
+  const idx = users.findIndex((u) => u.username === username);
   if (idx !== -1) {
     users[idx].balance = newBalance;
     writeUsers(users);
@@ -69,17 +71,16 @@ app.post('/register', (req, res) => {
     const all = readUsers();
 
     // Проверяем, не занят ли username
-    if (all.find(u => u.username === username)) {
+    if (all.find((u) => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
 
-    // Хэшируем пароль
-    const passwordHash = password; // клиент уже передает SHA-256‐хэш
+    // Хэшируем пароль (клиент уже передаёт SHA-256‐хэш)
+    const passwordHash = password;
 
     all.push({ username, passwordHash, balance: 1000, ip: userIP });
     writeUsers(all);
 
-    // NB: больше не авторизуем по IP, просто возвращаем успешную регистрацию
     res.json({ message: 'Регистрация успешна!' });
   } catch (err) {
     console.error(err);
@@ -89,7 +90,8 @@ app.post('/register', (req, res) => {
 
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  if (!username || !password)
+    return res.status(400).json({ error: 'Username and password are required' });
 
   try {
     const user = findUser(username);
@@ -100,7 +102,7 @@ app.post('/login', (req, res) => {
       return res.status(401).json({ error: 'Неверный пароль' });
     }
 
-    // Устанавливаем сессию только при явной форме входа
+    // Устанавливаем сессию
     req.session.user = { username: user.username };
     res.json({
       message: 'Аутентификация успешна',
@@ -113,7 +115,7 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/check-auth', (req, res) => {
-  // 1) Сначала проверяем: если сессия уже есть, возвращаем данные пользователя
+  // 1) Если сессия уже есть — возвращаем данные пользователя
   if (req.session.user) {
     try {
       const user = findUser(req.session.user.username);
@@ -125,24 +127,22 @@ app.get('/check-auth', (req, res) => {
     }
   }
 
-  // 2) Если сессии нет, пробуем «авто-логин» по IP
+  // 2) Если сессии нет — пробуем «авто-логин» по IP
   const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   const all = readUsers();
-  const user = all.find(u => u.ip === userIP);
+  const user = all.find((u) => u.ip === userIP);
 
   if (user) {
-    // Нашли запись по IP → создаём сессию
     req.session.user = { username: user.username };
     return res.json({ username: user.username, balance: user.balance });
   }
 
-  // 3) Если ни сессия, ни IP совпадения — пользователь не авторизован
+  // 3) Если ни сессии, ни IP совпадения — не авторизован
   return res.status(401).json({ error: 'Не авторизован' });
 });
 
-
 app.post('/logout', (req, res) => {
-  req.session.destroy(err => {
+  req.session.destroy((err) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ error: 'Ошибка при выходе' });
@@ -153,15 +153,12 @@ app.post('/logout', (req, res) => {
 });
 // ======= конец auth =======
 
+let roulettePlayers = []; // текущая очередь: [{ username, bet, color }]
+let lastSpinPlayers = null; // «снимок» очереди перед спином
+let lastSpinResult = null; // { winner, totalBet, timestamp, players: lastSpinPlayers }
+const spinInterval = 20000; // 20 сек
 
-
-
-let roulettePlayers = [];    // текущая очередь: [{ username, bet, color }]
-let lastSpinPlayers = null;  // «снимок» очереди перед спином
-let lastSpinResult = null;   // { winner, totalBet, timestamp, players: lastSpinPlayers }
-const spinInterval = 20000;  // 20 сек
-
-let nextSpin = null;         // временная метка (ms) следующего запланированного спина
+let nextSpin = null; // временная метка (ms) следующего запланированного спина
 let spinTimeoutId = null;
 
 // Генератор случайного цвета
@@ -175,21 +172,20 @@ function getRandomColor() {
 }
 
 /**
- * Функция, которая запускает спин. Вызывается через setTimeout, когда время истекает.
- * Если игроков < 2 — просто очищает очередь без результата.
- * Иначе формирует lastSpinPlayers, выбирает победителя, обновляет его баланс, сохраняет lastSpinResult.
+ * Запускает спин. Если игроков < 2 — просто очищает очередь без результата.
+ * Иначе: формирует lastSpinPlayers, выбирает победителя, обновляет его баланс, сохраняет lastSpinResult.
  */
 function runSpin() {
   const now = Date.now();
 
   if (roulettePlayers.length < 2) {
-    // Если менее двух — просто чистим очередь без результата
+    // Если игроков меньше двух — очистка без результата
     roulettePlayers = [];
     lastSpinResult = null;
     lastSpinPlayers = null;
   } else {
     // Делаем «снимок» очереди для анимации
-    lastSpinPlayers = roulettePlayers.map(p => ({ ...p }));
+    lastSpinPlayers = roulettePlayers.map((p) => ({ ...p }));
 
     const totalBet = roulettePlayers.reduce((sum, p) => sum + p.bet, 0);
     const randomAngle = Math.random() * 2 * Math.PI;
@@ -216,7 +212,7 @@ function runSpin() {
       winner: winnerEntry.username,
       totalBet: totalBet,
       timestamp: now,
-      players: lastSpinPlayers  // сюда попадает массив участников этого спина
+      players: lastSpinPlayers // здесь snapshot участников этого спина
     };
 
     // Очищаем очередь
@@ -227,16 +223,14 @@ function runSpin() {
   nextSpin = null;
   spinTimeoutId = null;
 
-  // Если в очереди после спина опять ≥ 2 (теоретически может успеть появиться),
-  // планируем новый
+  // Если после спина снова ≥ 2 игроков — планируем новый спин
   if (roulettePlayers.length >= 2) {
     nextSpin = Date.now() + spinInterval;
     spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 }
 
-// Запускаем первый «отсчёт» только когда появится второй игрок.
-// Он будет запущен внутри /roulette/join.
+// Первый «отсчёт» запускается только когда появляется второй игрок. Он устанавливается в /roulette/join.
 
 // ========== ENDPOINTS ==========
 
@@ -269,16 +263,15 @@ app.post('/roulette/join', (req, res) => {
   // Снимаем баланс
   updateUserBalance(username, user.balance - bet);
 
-  // Если ни разу не было ставок от этого игрока — добавляем новый объект
-  const existing = roulettePlayers.find(p => p.username === username);
+  // Если игрок уже в очереди — наращиваем ставку, иначе добавляем новый объект
+  const existing = roulettePlayers.find((p) => p.username === username);
   if (existing) {
     existing.bet += bet;
   } else {
     roulettePlayers.push({ username, bet, color: getRandomColor() });
   }
 
-  // Если после добавления стало ровно 2 игрока и ещё не запланирован спин —
-  // устанавливаем nextSpin и запускаем runSpin через 20 000 мс
+  // Если ровно 2 игрока и ещё не запланирован спин — запускаем первый отсчёт
   if (roulettePlayers.length === 2 && nextSpin === null) {
     nextSpin = Date.now() + spinInterval;
     spinTimeoutId = setTimeout(runSpin, spinInterval);
@@ -292,11 +285,11 @@ app.get('/roulette/next-spin', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  // Если nextSpin === null, вернётся null (значит ждём второго игрока)
+  // Если nextSpin === null, возвращаем null (ждём второго игрока)
   res.json({ nextSpin });
 });
 
-// Последний результат спина (содержит winner, totalBet, timestamp и массив игроков)
+// Последний результат спина (winner, totalBet, timestamp, players)
 app.get('/roulette/result', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -307,21 +300,21 @@ app.get('/roulette/result', (req, res) => {
   res.json(lastSpinResult);
 });
 
-// ========== «КРАШ» (оставляем без изменений) ==========
+// ========== «КРАШ» (без изменений) ==========
 const activeCrashGames = {};
 function generateCrashPoint() {
   const rand = Math.random() * 100;
   let cp;
   if (rand <= 50) {
-    cp = (Math.random() * (2 - 1) + 1);
+    cp = Math.random() * (2 - 1) + 1;
   } else if (rand <= 65) {
-    cp = (Math.random() * (5 - 3) + 3);
+    cp = Math.random() * (5 - 3) + 3;
   } else if (rand <= 80) {
-    cp = (Math.random() * (10 - 5) + 5);
+    cp = Math.random() * (10 - 5) + 5;
   } else if (rand <= 95) {
-    cp = (Math.random() * (50 - 10) + 10);
+    cp = Math.random() * (50 - 10) + 10;
   } else {
-    cp = (Math.random() * (1500 - 50) + 50);
+    cp = Math.random() * (1500 - 50) + 50;
   }
   return parseFloat(cp.toFixed(2));
 }
@@ -380,7 +373,7 @@ app.post('/crash/cashout', (req, res) => {
   res.json({ winnings, newBalance: findUser(username).balance });
 });
 
-// === По умолчанию — отдаём login.html на корень ===
+// === По умолчанию — отдаем login.html на корень ===
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
