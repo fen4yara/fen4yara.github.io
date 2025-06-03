@@ -411,18 +411,111 @@ function startNewCrashRound() {
   // players уже заполнен (минимум 1 игрок поставил)
 }
 
+const BET_DELAY = 10 * 1000;          // 10 сек «ждём ставок»
+const CRASH_ROUND_DURATION = 10 * 1000;   // 10 сек «игра с растущим коэффициентом»
+const CRASH_GROWTH_SPEED = 0.2;      // coef = 1 + elapsedSec * 0.2
+
+let currentCrash = {
+  players: [],         // { username, bet, color, cashedOut, cashoutCoef, winnings }
+  bettingEndTime: null, // timestamp (ms) когда окончится «зона ставок»
+  realStartTime: null,  // timestamp (ms) когда начнётся рост коэффициента
+  crashPoint: null,    // когда произойдёт краш (число > 1.00)
+  ended: true,         // true → раунд не идёт, false → принимаем ставки или идёт игра
+  timerId: null        // id таймера, чтобы clearTimeout
+};
+
+let crashHistory = []; // [{ timestamp, crashPoint, totalBet, players: [ ... ] }, ...] (макс. 5)
+
+function getRandomColor() {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
+
+function generateCrashPoint() {
+  const rand = Math.random() * 100;
+  let cp;
+  if (rand <= 50) {
+    cp = Math.random() * (2 - 1) + 1;
+  } else if (rand <= 65) {
+    cp = Math.random() * (5 - 3) + 3;
+  } else if (rand <= 80) {
+    cp = Math.random() * (10 - 5) + 5;
+  } else if (rand <= 95) {
+    cp = Math.random() * (50 - 10) + 10;
+  } else {
+    cp = Math.random() * (1500 - 50) + 50;
+  }
+  return parseFloat(cp.toFixed(2));
+}
+
+/**
+ * По истечении BET_DELAY + CRASH_ROUND_DURATION:
+ * - сохраняем результат раунда в историю
+ * - сбрасываем currentCrash
+ */
+function endCrashRound() {
+  if (currentCrash.ended) return;
+
+  const timestamp = Date.now();
+  const totalBet = currentCrash.players.reduce((sum, p) => sum + p.bet, 0);
+
+  // Снимок участников: если игрок не cashout-ился, то winnings = 0
+  const snapshot = currentCrash.players.map((p) => ({
+    username: p.username,
+    bet: p.bet,
+    cashedOut: p.cashedOut,
+    cashoutCoef: p.cashedOut ? p.cashoutCoef : null,
+    winnings: p.cashedOut ? p.winnings : 0,
+    color: p.color
+  }));
+
+  crashHistory.unshift({
+    timestamp,
+    crashPoint: currentCrash.crashPoint,
+    totalBet,
+    players: snapshot
+  });
+  if (crashHistory.length > 5) crashHistory.pop();
+
+  clearTimeout(currentCrash.timerId);
+  currentCrash = {
+    players: [],
+    bettingEndTime: null,
+    realStartTime: null,
+    crashPoint: null,
+    ended: true,
+    timerId: null
+  };
+}
+
+/**
+ * Запускает таймер на окончание раунда:
+ * - через BET_DELAY сек мы переходим в «игру коэффициента»
+ * - через (BET_DELAY + CRASH_ROUND_DURATION) наступает краш
+ */
+function scheduleCrashRound() {
+  const now = Date.now();
+  currentCrash.bettingEndTime = now + BET_DELAY;
+  currentCrash.realStartTime = currentCrash.bettingEndTime;
+  const totalDuration = BET_DELAY + CRASH_ROUND_DURATION;
+
+  currentCrash.timerId = setTimeout(endCrashRound, totalDuration);
+  currentCrash.ended = false;
+  // crashPoint уже сгенерирован в момент первого join
+}
+
 // ========== ЭНДПОЙНТЫ «КРАШ» ==========
 
-// 1) Получить состояние текущего раунда: 
-//    - players (без выпадений/общих полей) 
-//    - startTime 
-//    - ended (булево) 
-//    - crashPoint (если раунд уже закончился, иначе null) 
-//    - serverTime (для расчёта коэффициента на клиенте)
+// 1) GET /crash/state → состояние текущего раунда
 app.get('/crash/state', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
+
   res.json({
     players: currentCrash.players.map((p) => ({
       username: p.username,
@@ -432,14 +525,15 @@ app.get('/crash/state', (req, res) => {
       cashoutCoef: p.cashoutCoef,
       winnings: p.winnings
     })),
-    startTime: currentCrash.startTime,
+    bettingEndTime: currentCrash.bettingEndTime, // если null, значит нет активного раунда
+    realStartTime: currentCrash.realStartTime,
     ended: currentCrash.ended,
     crashPoint: currentCrash.ended ? currentCrash.crashPoint : null,
     serverTime: Date.now()
   });
 });
 
-// 2) Присоединиться к раунду (сделать ставку): POST /crash/join { bet: number }
+// 2) POST /crash/join { bet }
 app.post('/crash/join', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -449,7 +543,6 @@ app.post('/crash/join', (req, res) => {
   if (!bet || typeof bet !== 'number' || bet <= 0) {
     return res.status(400).json({ error: 'Некорректная ставка' });
   }
-
   const user = findUser(username);
   if (!user) {
     return res.status(404).json({ error: 'Пользователь не найден' });
@@ -458,25 +551,24 @@ app.post('/crash/join', (req, res) => {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  // Если раунд ещё не запущен (ended = true), запускаем новый:
+  const now = Date.now();
+
+  // Если раунд не запущен → создаём новый
   if (currentCrash.ended) {
+    currentCrash.crashPoint = generateCrashPoint();
+    scheduleCrashRound();
     currentCrash.players = [];
-    currentCrash.ended = false;
-    startNewCrashRound();
   }
 
-  // Теперь проверяем, что ставка делается до того, как crashPoint уже наступил:
-  const now = Date.now();
-  if (now - currentCrash.startTime >= CRASH_ROUND_DURATION) {
-    // Если раунд уже должен был закончиться (чаще бывает, если приходят сразу после тайм-аута),
-    // просто даём ошибку, что нужно подождать следующий раунд.
-    return res.status(400).json({ error: 'Раунд уже завершён, дождитесь следующего' });
+  // Если мы уже вышли за зону ставок (после bettingEndTime), запрещаем «join»
+  if (now > currentCrash.bettingEndTime) {
+    return res.status(400).json({ error: 'Зона ставок закрыта, дождитесь следующего раунда' });
   }
 
   // Списываем баланс
   updateUserBalance(username, user.balance - bet);
 
-  // Добавляем (или увеличиваем) участника:
+  // Добавляем (или дополняем) участника
   let existing = currentCrash.players.find((p) => p.username === username);
   if (existing) {
     existing.bet += bet;
@@ -501,13 +593,14 @@ app.post('/crash/join', (req, res) => {
       cashoutCoef: p.cashoutCoef,
       winnings: p.winnings
     })),
-    startTime: currentCrash.startTime,
+    bettingEndTime: currentCrash.bettingEndTime,
+    realStartTime: currentCrash.realStartTime,
     ended: currentCrash.ended,
     serverTime: Date.now()
   });
 });
 
-// 3) Забрать (cashout): POST /crash/cashout { coefficient: number }
+// 3) POST /crash/cashout { coefficient }
 app.post('/crash/cashout', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -518,12 +611,32 @@ app.post('/crash/cashout', (req, res) => {
     return res.status(400).json({ error: 'Некорректный коэффициент' });
   }
 
-  // Если раунд уже завершён:
   if (currentCrash.ended) {
     return res.status(400).json({ error: 'Раунд уже завершён' });
   }
 
-  // Находим игрока:
+  const now = Date.now();
+
+  // Если сейчас мы в зоне ставок (до realStartTime), никто не может cashout
+  if (now < currentCrash.realStartTime) {
+    return res.status(400).json({ error: 'Ещё не начался рост коэффициента' });
+  }
+
+  // Если игрок пытается cashout после момента краша:
+  const crashTime = currentCrash.realStartTime + CRASH_ROUND_DURATION;
+  // допустимая точка cashout < crashPoint
+  if (coefficient >= currentCrash.crashPoint || now >= crashTime) {
+    // Он «опоздал»
+    const participant = currentCrash.players.find((p) => p.username === username);
+    if (participant) {
+      participant.cashedOut = false;
+      participant.cashoutCoef = null;
+      participant.winnings = 0;
+    }
+    return res.status(400).json({ error: 'Уже крашнулся, нет выплат' });
+  }
+
+  // Находим участника
   const participant = currentCrash.players.find((p) => p.username === username);
   if (!participant) {
     return res.status(400).json({ error: 'Вы не участвуете в текущем раунде' });
@@ -532,27 +645,12 @@ app.post('/crash/cashout', (req, res) => {
     return res.status(400).json({ error: 'Вы уже забрали' });
   }
 
-  // Проверяем, не наступил ли уже краш:
-  const now = Date.now();
-  const elapsed = (now - currentCrash.startTime) / 1000; // секунды, прошедшие с запуска
-  const clientCoef = 1 + elapsed * CRASH_GROWTH_SPEED;
-  // Но реальный момент краша хранится в currentCrash.crashPoint (например, 3.45).
-  // Если запрошенный coefficient >= crashPoint → значит, игрок «опоздал» и проиграл.
-  if (coefficient >= currentCrash.crashPoint) {
-    participant.cashedOut = false;
-    participant.cashoutCoef = null;
-    participant.winnings = 0;
-    return res.status(400).json({ error: 'Уже крашнулся, нет выплат' });
-  }
-
-  // Иначе считаем выигрыш:
+  // Считаем выигрыш
   const winnings = Math.floor(participant.bet * coefficient);
-  // Добавляем на баланс:
-  const user = findUser(username);
-  if (user) {
-    updateUserBalance(username, user.balance + winnings);
+  const userObj = findUser(username);
+  if (userObj) {
+    updateUserBalance(username, userObj.balance + winnings);
   }
-  // Запоминаем, что он успел:
   participant.cashedOut = true;
   participant.cashoutCoef = coefficient;
   participant.winnings = winnings;
@@ -560,13 +658,11 @@ app.post('/crash/cashout', (req, res) => {
   res.json({ winnings, newBalance: findUser(username).balance });
 });
 
-// 4) История последних 5 раундов: GET /crash/history
+// 4) GET /crash/history
 app.get('/crash/history', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  // Отдаём crashHistory, где каждый элемент:
-  // { timestamp, crashPoint, totalBet, players: [ { username, bet, cashedOut, cashoutCoef, winnings, color } ] }
   res.json(crashHistory);
 });
 
