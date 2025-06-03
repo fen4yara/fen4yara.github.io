@@ -319,45 +319,50 @@
     });
 
     joinBtn.addEventListener('click', async () => {
-      const betValue = parseInt(document.getElementById('bet').value);
-      if (!betValue || betValue <= 0) {
-        showMessage('Некорректная ставка!', 'red');
-        return;
-      }
-      if (betValue > user.balance) {
-        showMessage('Недостаточно средств!', 'red');
-        return;
-      }
+  const betValue = parseInt(document.getElementById('bet').value);
+  if (!betValue || betValue <= 0) {
+    showMessage('Некорректная ставка!', 'red');
+    return;
+  }
+  if (betValue > user.balance) {
+    showMessage('Недостаточно средств!', 'red');
+    return;
+  }
 
-      try {
-        const resp = await fetch(`${BASE_URL}/roulette/join`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ bet: betValue })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Ошибка при join');
-        }
-
-        players = data.players;
-        drawWheelByList(players);
-
-        const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-        if (check.ok) {
-          const upd = await check.json();
-          user.balance = upd.balance;
-          balanceEl.textContent = user.balance;
-        }
-
-        showMessage('Вы в игре. Ждём спина...', '#333');
-
-        // После join: fetchNextSpin() сработает автоматически в polling
-      } catch (err) {
-        showMessage(err.message, 'red');
-      }
+  try {
+    const resp = await fetch(`${BASE_URL}/roulette/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ bet: betValue })
     });
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.error || 'Ошибка при join');
+    }
+
+    // Обновляем локальную очередь и рисуем колесо
+    players = data.players;
+    drawWheelByList(players);
+
+    // Обновляем баланс
+    const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+    if (check.ok) {
+      const upd = await check.json();
+      user.balance = upd.balance;
+      balanceEl.textContent = user.balance;
+    }
+
+    showMessage('Вы в игре. Ждём спина...', '#333');
+
+    // **Вот здесь** сразу запрашиваем nextSpin, чтобы сразу получить полные 20 секунд
+    await fetchNextSpin();
+
+  } catch (err) {
+    showMessage(err.message, 'red');
+  }
+});
+
   </script>
 </body>
 </html>
