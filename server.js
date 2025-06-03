@@ -122,19 +122,28 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/check-auth', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-
-  try {
+  if (req.session.user) {
+    // Сессия уже есть
     const user = findUser(req.session.user.username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-    res.json({ username: user.username, balance: user.balance });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
+    return res.json({ username: user.username, balance: user.balance });
   }
+
+  // Сессии нет — попробуем найти пользователя по IP
+  const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const all = readUsers();
+  const user = all.find(u => u.ip === userIP);
+
+  if (user) {
+    // IP совпал — авторизуем пользователя
+    req.session.user = { username: user.username };
+    return res.json({ username: user.username, balance: user.balance });
+  }
+
+  // Нет сессии и нет совпадения IP — не авторизован
+  res.status(401).json({ error: 'Не авторизован' });
 });
+
 
 app.post('/logout', (req, res) => {
   req.session.destroy(err => {
