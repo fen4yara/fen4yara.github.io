@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
   <title>Краш 🚀</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -88,7 +87,6 @@
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       max-width: 600px;
       margin: 30px auto 0;
-
     }
     .history-area h2 {
       margin-bottom: 10px;
@@ -119,12 +117,6 @@
       color: #fff;
       cursor: pointer;
     }
- #chartContainer {
-      position: relative;
-      height: 300px;
-      margin-top: 20px;
-      background: #fff;
-    }
   </style>
 </head>
 <body>
@@ -133,11 +125,6 @@
   <div class="balance">
     Баланс: <span id="balance">...</span> 🍬
   </div>
-
-    <div id="chartContainer">
-      <canvas id="crashChart"></canvas>
-    </div>
-
 
   <div class="crash-area">
     <label for="bet">Ставка:</label>
@@ -150,8 +137,6 @@
       Коэффициент: <span id="coefficient">1.00</span>x
     </div>
     <p id="message"></p>
-
-<!-- График -->
 
     <div class="players-list">
       <h3>Участники раунда:</h3>
@@ -196,8 +181,7 @@
     let crashEnded = true;
     let hasBet = false;       // true, если пользователь уже поставил текущую ставку
     let hasCashedOut = false; // true после нажатия «Забрать»
-   let chart = null;
-    let chartStartTime = null; // timestamp начала роста (в миллисекундах)
+
     window.addEventListener('DOMContentLoaded', async () => {
       try {
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
@@ -238,81 +222,6 @@
         div.append(colorDot, text);
         playersContainer.append(div);
       });
-    }
-
-function initChart() {
-      const ctx = document.getElementById('crashChart').getContext('2d');
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [], // сюда будут попадать времена (в секундах)
-          datasets: [{
-            label: 'Коэффициент',
-            data: [],   // сюда попадут значения коэффициента
-            borderColor: 'rgba(255, 99, 132, 1)',
-            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-            borderWidth: 2,
-            pointRadius: 0, // без точек, только линия
-            tension: 0.2    // легкое сглаживание
-          }]
-        },
-        options: {
-          animation: false,
-          scales: {
-            x: {
-              type: 'linear',
-              title: {
-                display: true,
-                text: 'Время, сек'
-              },
-              ticks: {
-                callback: (value) => value.toFixed(1)
-              }
-            },
-            y: {
-              title: {
-                display: true,
-                text: 'Коэффициент'
-              },
-              beginAtZero: true
-            }
-          },
-          plugins: {
-            legend: {
-              display: false
-            }
-          }
-        }
-      });
-    }
-
-    // Сбрасываем график к стартовым значениям
-    function resetChart() {
-      chart.data.labels = [];
-      chart.data.datasets[0].data = [];
-      chart.update();
-      chartStartTime = null;
-    }
-
-    // Добавляем новую точку на график
-    function addChartPoint(serverTime, bettingEndTime) {
-      // Если ещё не начали рост, не добавляем
-      if (serverTime < bettingEndTime) return;
-
-      const elapsedMs = serverTime - bettingEndTime;
-      const elapsedSec = elapsedMs / 1000;
-      // coef = 1 + BASE_SPEED·t + 0.5·ACCEL·t²
-      const coef = 1 + BASE_SPEED * elapsedSec + 0.5 * ACCEL * elapsedSec * elapsedSec;
-
-      // Если это первая точка роста, запомним chartStartTime
-      if (chartStartTime === null) {
-        chartStartTime = serverTime;
-      }
-
-      // Обновляем данные чарта
-      chart.data.labels.push(elapsedSec);
-      chart.data.datasets[0].data.push(coef);
-      chart.update('none');
     }
 
     // Получаем текущее состояние раунда
