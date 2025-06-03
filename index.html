@@ -10,7 +10,13 @@
 
 <body>
   <main>
+
     <h1>Вход</h1>
+<!-- Добавим кнопку «Сменить аккаунт» -->
+    <!-- По клику она вызовет logOut(), чтобы очистить текущую сессию (если была) -->
+    <button id="logoutBtn" style="display: none; margin-bottom: 1em;">
+      Выйти / Сменить аккаунт
+    </button>
     <form id="loginForm">
       <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
       <input type="password" id="loginPassword" placeholder="Пароль" required />
@@ -31,7 +37,7 @@
       return hashHex;
     }
 
-    // При открытии страницы сразу проверяем авторизацию (по IP или сессии)
+    // При загрузке страницы проверяем: есть ли уже сессия?
     window.addEventListener('DOMContentLoaded', async () => {
       try {
         const response = await fetch(`${BASE_URL}/check-auth`, {
@@ -39,14 +45,31 @@
         });
 
         if (response.ok) {
-          // Уже авторизован – сразу переходим
-          window.location.href = 'mainPage.html';
+          // Если сессия есть — показываем «Выйти / Сменить»
+          document.getElementById('logoutBtn').style.display = 'block';
+          // И не редиректим автоматически, чтобы пользователь мог нажать «Сменить»
         }
       } catch (err) {
-        console.error('Проверка авторизации:', err.message);
+        console.error('Ошибка при check-auth:', err);
       }
     });
 
+    // Обработчик кнопки «Выйти / Сменить аккаунт»
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/logout`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        if (!resp.ok) throw new Error('Не удалось выйти');
+        // После logout перезагружаем страницу, чтобы очистить форму
+        window.location.reload();
+      } catch (err) {
+        alert('Ошибка при выходе: ' + err.message);
+      }
+    });
+
+    // Обработчик формы входа
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('loginUsername').value.trim();
@@ -70,6 +93,8 @@
 
         const data = await response.json();
         alert(data.message);
+
+        // После успешного входа сразу кидаем на mainPage
         window.location.href = 'mainPage.html';
       } catch (err) {
         alert('Ошибка: ' + err.message);
