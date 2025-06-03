@@ -583,3 +583,11 @@ app.get('/crash/history', (req, res) => {
   }
   res.json(crashHistory);
 });
+
+app.get('/', (req, res) => {Add commentMore actions
+  res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
+});
