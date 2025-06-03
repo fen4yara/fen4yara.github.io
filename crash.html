@@ -18,12 +18,12 @@
       margin-bottom: 20px;
     }
     .crash-area {
-
       padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       max-width: 400px;
       margin: auto;
+      background: #fff;
     }
     .crash-area label {
       font-weight: bold;
@@ -83,12 +83,12 @@
       margin-right: 8px;
     }
     .history-area {
-
       padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
       max-width: 600px;
       margin: 30px auto 0;
+      background: #fff;
     }
     .history-area h2 {
       margin-bottom: 10px;
@@ -165,6 +165,7 @@
 
     let user = null;
     let clientTimerId = null;
+    let stateIntervalId = null;
 
     const balanceEl = document.getElementById('balance');
     const coefficientEl = document.getElementById('coefficient');
@@ -189,8 +190,12 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
 
+        // Сразу поднимаем состояние раунда
         await fetchCrashState();
         loadHistory();
+
+        // А теперь каждые 0.5 с обновляем состояние раунда
+        stateIntervalId = setInterval(fetchCrashState, 500);
       } catch (err) {
         alert('Пожалуйста, сначала войдите.');
         window.location.href = 'index.html';
@@ -220,6 +225,7 @@
       });
     }
 
+    // Основной fetch для состояния раунда
     async function fetchCrashState() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
@@ -231,6 +237,9 @@
         crashTime = data.crashTime;
         crashEnded = data.ended;
 
+        const now = Date.now();
+
+        // 1) Если раунд завершён или не запускался
         if (crashEnded || !crashTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -244,7 +253,7 @@
           return;
         }
 
-        const now = Date.now();
+        // 2) Фаза ставок (до bettingEndTime)
         if (now < bettingEndTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -257,9 +266,11 @@
           return;
         }
 
+        // 3) Фаза роста (bettingEndTime ≤ now < crashTime)
         if (now >= bettingEndTime && now < crashTime) {
           startBtn.disabled = true;
           betInputEl.disabled = true;
+          cashoutBtn.disabled = false; // Включаем «Забрать»
           showMessage('Раунд идёт... 🚀', '#333');
           if (!clientTimerId) {
             clientTimerId = setInterval(drawCoefficient, 100);
@@ -267,7 +278,7 @@
           return;
         }
 
-        // Если now ≥ crashTime, интерпретируем как закончившийся раунд
+        // 4) Если now ≥ crashTime (краш), показываем финальный коэффициент
         if (now >= crashTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -292,13 +303,16 @@
       }
     }
 
+    // Рисуем растущий коэффициент (вызывается внутри setInterval)
     async function drawCoefficient() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка при получении состояния');
 
-        // Если закончилось
+        const now = data.serverTime;
+
+        // Если раунд уже завершился
         if (data.ended) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -319,9 +333,7 @@
           return;
         }
 
-        const now = data.serverTime;
-
-        // Фаза ставок
+        // Если сейчас фаза ставок (не должно здесь попадать, но проверим)
         if (now < data.bettingEndTime) {
           coefficientEl.textContent = '1.00';
           const secsLeft = Math.ceil((data.bettingEndTime - now) / 1000);
@@ -341,7 +353,7 @@
           return;
         }
 
-        // Если уже ≥ crashTime (браузер зацейтнот), обработаем как краш
+        // Если уже настал краш
         if (now >= data.crashTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -373,7 +385,7 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
       } catch {
-        // ничего
+        // игнорируем
       }
     }
 
