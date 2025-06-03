@@ -150,9 +150,8 @@
 
   <div class="history-area">
     <h2>История последних 5 раундов</h2>
-    <button id="refreshHistory">Обновить историю</button>
     <ul class="history-list" id="historyList">
-      <!-- Здесь история -->
+      <!-- Заполняется автоматически -->
     </ul>
   </div>
 
@@ -162,6 +161,10 @@
 
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
+
+    // Должны совпадать с серверными константами:
+    const BASE_SPEED = 0.1;   // скорость в 1/sec
+    const ACCEL      = 0.02;  // ускорение в 1/sec²
 
     let user = null;
     let clientTimerId = null;
@@ -175,7 +178,6 @@
     const betInputEl = document.getElementById('bet');
     const playersContainer = document.getElementById('playersContainer');
     const historyList = document.getElementById('historyList');
-    const refreshHistoryBtn = document.getElementById('refreshHistory');
 
     let bettingEndTime = null;
     let crashTime = null;
@@ -190,11 +192,11 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
 
-        // Сразу поднимаем состояние раунда
+        // Сразу подтягиваем состояние и историю
         await fetchCrashState();
-        loadHistory();
+        await loadHistory();
 
-        // А теперь каждые 0.5 с обновляем состояние раунда
+        // Каждые 500 мс обновляем состояние раунда
         stateIntervalId = setInterval(fetchCrashState, 500);
       } catch (err) {
         alert('Пожалуйста, сначала войдите.');
@@ -225,7 +227,7 @@
       });
     }
 
-    // Основной fetch для состояния раунда
+    // Получаем текущее состояние раунда
     async function fetchCrashState() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
@@ -239,7 +241,7 @@
 
         const now = Date.now();
 
-        // 1) Если раунд завершён или не запускался
+        // 1) Раунд завершён или не запускался:
         if (crashEnded || !crashTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -253,7 +255,7 @@
           return;
         }
 
-        // 2) Фаза ставок (до bettingEndTime)
+        // 2) Фаза ставок (ещё до bettingEndTime):
         if (now < bettingEndTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -266,11 +268,11 @@
           return;
         }
 
-        // 3) Фаза роста (bettingEndTime ≤ now < crashTime)
+        // 3) Фаза роста (bettingEndTime ≤ now < crashTime):
         if (now >= bettingEndTime && now < crashTime) {
           startBtn.disabled = true;
           betInputEl.disabled = true;
-          cashoutBtn.disabled = false; // Включаем «Забрать»
+          cashoutBtn.disabled = false; // В этот момент «Забрать» доступна
           showMessage('Раунд идёт... 🚀', '#333');
           if (!clientTimerId) {
             clientTimerId = setInterval(drawCoefficient, 100);
@@ -278,11 +280,12 @@
           return;
         }
 
-        // 4) Если now ≥ crashTime (краш), показываем финальный коэффициент
+        // 4) Если now ≥ crashTime — краш
         if (now >= crashTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
           if (data.crashPoint !== null) {
+            // Показываем точный коэффициент краша
             coefficientEl.textContent = data.crashPoint.toFixed(2);
             showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
           } else {
@@ -296,6 +299,7 @@
           hasCashedOut = false;
           renderPlayers(data.players);
           await updateBalanceInUI();
+          await loadHistory(); // автоматически обновляем историю сразу после краша
         }
       } catch (err) {
         console.error(err);
@@ -303,7 +307,7 @@
       }
     }
 
-    // Рисуем растущий коэффициент (вызывается внутри setInterval)
+    // Рисуем растущий коэффициент с ускорением
     async function drawCoefficient() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
@@ -312,7 +316,7 @@
 
         const now = data.serverTime;
 
-        // Если раунд уже завершился
+        // Если раунд уже завершился:
         if (data.ended) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -330,30 +334,30 @@
           hasCashedOut = false;
           renderPlayers(data.players);
           await updateBalanceInUI();
+          await loadHistory();
           return;
         }
 
-        // Если сейчас фаза ставок (не должно здесь попадать, но проверим)
+        // Если ещё фаза ставок (мало вероятно попасть сюда, но на всякий случай):
         if (now < data.bettingEndTime) {
           coefficientEl.textContent = '1.00';
           const secsLeft = Math.ceil((data.bettingEndTime - now) / 1000);
           showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
-          startBtn.disabled = true;
-          betInputEl.disabled = true;
           cashoutBtn.disabled = true;
           return;
         }
 
-        // Фаза роста коэффициента
+        // Если в фазе роста (data.bettingEndTime ≤ now < data.crashTime):
         if (now >= data.bettingEndTime && now < data.crashTime) {
-          const elapsedSec = (now - data.bettingEndTime) / 1000;
-          const coef = 1 + elapsedSec * 0.2;
+          const elapsedSec = (now - data.bettingEndTime) / 1000; // секунды после старта роста
+          // модель: coef = 1 + BASE_SPEED·t + 0.5·ACCEL·t²
+          const coef = 1 + BASE_SPEED * elapsedSec + 0.5 * ACCEL * elapsedSec * elapsedSec;
           coefficientEl.textContent = coef.toFixed(2);
           renderPlayers(data.players);
           return;
         }
 
-        // Если уже настал краш
+        // Если уже ≥ crashTime (браузер мог зацейтноть), выводим краш:
         if (now >= data.crashTime) {
           clearInterval(clientTimerId);
           clientTimerId = null;
@@ -371,6 +375,7 @@
           hasCashedOut = false;
           renderPlayers(data.players);
           await updateBalanceInUI();
+          await loadHistory();
         }
       } catch (err) {
         console.error(err);
@@ -378,6 +383,7 @@
       }
     }
 
+    // Обновляем баланс
     async function updateBalanceInUI() {
       try {
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
@@ -385,7 +391,7 @@
         user = await resp.json();
         balanceEl.textContent = user.balance;
       } catch {
-        // игнорируем
+        // ничего
       }
     }
 
@@ -474,7 +480,7 @@
       }
     });
 
-    // История
+    // История без кнопки – обновляется автоматически
     async function loadHistory() {
       try {
         const resp = await fetch(`${BASE_URL}/crash/history`, { credentials: 'include' });
@@ -487,16 +493,16 @@
           li.className = 'history-item';
           const date = new Date(round.timestamp);
           const header = document.createElement('div');
-          header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet} 🍬`;
+          header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet}🍬`;
           li.append(header);
 
           const subUl = document.createElement('ul');
           subUl.className = 'history-players';
           round.players.forEach((p) => {
             const subLi = document.createElement('li');
-            let txt = `${p.username} — ставка ${p.bet} 🍬`;
+            let txt = `${p.username} — ставка ${p.bet}🍬`;
             if (p.cashedOut) {
-              txt += `, забрал(а) на x${p.cashoutCoef.toFixed(2)} → выигрыш ${p.winnings} 🍬`;
+              txt += `, забрал(а) на x${p.cashoutCoef.toFixed(2)} → выигрыш ${p.winnings}🍬`;
             } else {
               txt += `, проиграл(а)`;
             }
@@ -510,8 +516,6 @@
         console.error(err);
       }
     }
-
-    refreshHistoryBtn.addEventListener('click', loadHistory);
   </script>
 </body>
 </html>
