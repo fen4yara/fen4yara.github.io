@@ -14,8 +14,8 @@
     <h1>Вход</h1>
 <!-- Добавим кнопку «Сменить аккаунт» -->
     <!-- По клику она вызовет logOut(), чтобы очистить текущую сессию (если была) -->
-    <button id="logoutBtn" style="display: none; margin-bottom: 1em;">
-      Выйти / Сменить аккаунт
+    <button id="loginAsBtn" style="display: none; margin-bottom: 1em;">
+      <!-- Текст подставится динамически -->
     </button>
     <form id="loginForm">
       <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
@@ -33,43 +33,35 @@
       const data = encoder.encode(password);
       const hashBuffer = await crypto.subtle.digest('SHA-256', data);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      return hashHex;
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    // При загрузке страницы проверяем: есть ли уже сессия?
     window.addEventListener('DOMContentLoaded', async () => {
       try {
-        const response = await fetch(`${BASE_URL}/check-auth`, {
+        const resp = await fetch(`${BASE_URL}/check-auth`, {
           credentials: 'include'
         });
 
-        if (response.ok) {
-          // Если сессия есть — показываем «Выйти / Сменить»
-          document.getElementById('logoutBtn').style.display = 'block';
-          // И не редиректим автоматически, чтобы пользователь мог нажать «Сменить»
+        if (resp.ok) {
+          // Если уже авторизован (по сессии или IP), показываем кнопку «Войти как 'nickname'»
+          const userData = await resp.json();
+          const loginAsBtn = document.getElementById('loginAsBtn');
+          loginAsBtn.textContent = `Войти как '${userData.username}'`;
+          loginAsBtn.style.display = 'block';
+
+          // Скрываем форму входа, чтобы не путать пользователя
+          document.getElementById('loginForm').style.display = 'none';
+
+          // При клике переходим на mainPage.html
+          loginAsBtn.addEventListener('click', () => {
+            window.location.href = 'mainPage.html';
+          });
         }
       } catch (err) {
         console.error('Ошибка при check-auth:', err);
       }
     });
 
-    // Обработчик кнопки «Выйти / Сменить аккаунт»
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      try {
-        const resp = await fetch(`${BASE_URL}/logout`, {
-          method: 'POST',
-          credentials: 'include'
-        });
-        if (!resp.ok) throw new Error('Не удалось выйти');
-        // После logout перезагружаем страницу, чтобы очистить форму
-        window.location.reload();
-      } catch (err) {
-        alert('Ошибка при выходе: ' + err.message);
-      }
-    });
-
-    // Обработчик формы входа
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('loginUsername').value.trim();
@@ -93,8 +85,6 @@
 
         const data = await response.json();
         alert(data.message);
-
-        // После успешного входа сразу кидаем на mainPage
         window.location.href = 'mainPage.html';
       } catch (err) {
         alert('Ошибка: ' + err.message);
