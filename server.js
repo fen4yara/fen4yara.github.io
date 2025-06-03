@@ -310,8 +310,8 @@ app.get('/roulette/result', (req, res) => {
 
 
 const BET_DELAY    = 10 * 1000;    // 10 сек фаза ставок
-const BASE_SPEED   = 0.1;          // базовая скорость (в 1/sec)
-const ACCEL        = 0.02;         // ускорение (в 1/sec²)
+const BASE_SPEED   = 0.05;          // базовая скорость (в 1/sec)
+const ACCEL        = 0.08;         // ускорение (в 1/sec²)
 
 let currentCrash = {
   players: [],        // { username, bet, color, cashedOut, cashoutCoef, winnings }
