@@ -68,27 +68,19 @@ app.post('/register', (req, res) => {
   try {
     const all = readUsers();
 
-    // Проверяем, есть ли уже аккаунт с таким IP
-    const existingUserByIP = all.find(u => u.ip === userIP);
-
     // Проверяем, не занят ли username
     if (all.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Пользователь уже существует' });
     }
 
     // Хэшируем пароль
-    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+    const passwordHash = password; // клиент уже передает SHA-256‐хэш
 
-    const newUser = { username, passwordHash, balance: 1000, ip: userIP };
-    all.push(newUser);
+    all.push({ username, passwordHash, balance: 1000, ip: userIP });
     writeUsers(all);
 
-    // Если IP уже есть в базе, сразу авторизуем пользователя
-    if (existingUserByIP && existingUserByIP.ip === userIP) {
-      req.session.user = { username: newUser.username };
-    }
-
-    res.json({ message: 'Регистрация успешна! Вы автоматически вошли в систему' });
+    // NB: больше не авторизуем по IP, просто возвращаем успешную регистрацию
+    res.json({ message: 'Регистрация успешна!' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера при регистрации' });
@@ -103,14 +95,13 @@ app.post('/login', (req, res) => {
     const user = findUser(username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
-    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
-
-    if (user.passwordHash !== passwordHash) {
+    // Сравниваем хэши паролей
+    if (user.passwordHash !== password) {
       return res.status(401).json({ error: 'Неверный пароль' });
     }
 
+    // Устанавливаем сессию только при явной форме входа
     req.session.user = { username: user.username };
-
     res.json({
       message: 'Аутентификация успешна',
       user: { username: user.username, balance: user.balance }
@@ -122,28 +113,19 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/check-auth', (req, res) => {
-  if (req.session.user) {
-    // Сессия уже есть
+  // Проверяем только сессию, без «автоавторизации» по IP
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  try {
     const user = findUser(req.session.user.username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-    return res.json({ username: user.username, balance: user.balance });
+    res.json({ username: user.username, balance: user.balance });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
   }
-
-  // Сессии нет — попробуем найти пользователя по IP
-  const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  const all = readUsers();
-  const user = all.find(u => u.ip === userIP);
-
-  if (user) {
-    // IP совпал — авторизуем пользователя
-    req.session.user = { username: user.username };
-    return res.json({ username: user.username, balance: user.balance });
-  }
-
-  // Нет сессии и нет совпадения IP — не авторизован
-  res.status(401).json({ error: 'Не авторизован' });
 });
-
 
 app.post('/logout', (req, res) => {
   req.session.destroy(err => {
@@ -156,6 +138,7 @@ app.post('/logout', (req, res) => {
   });
 });
 // ======= конец auth =======
+
 
 
 
