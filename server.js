@@ -322,7 +322,8 @@ let currentCrash = {
   timerId: null       // setTimeout ID, чтобы можно было clearTimeout
 };
 
-let crashHistory = []; // последние 5 раундов: 
+let crashHistory = [];
+let lastCrashResult = null;// последние 5 раундов: 
 // { timestamp, crashPoint, totalBet, players: [ { username, bet, cashedOut, cashoutCoef, winnings, color } ] }
 
 
@@ -371,13 +372,17 @@ function endCrashRound() {
     color: p.color
   }));
 
-  crashHistory.unshift({
+  const result = {
     timestamp,
     crashPoint: currentCrash.crashPoint,
     totalBet,
     players: snapshot
-  });
+  };
+
+  crashHistory.unshift(result);
   if (crashHistory.length > 5) crashHistory.pop();
+
+  lastCrashResult = result; // сохраняем, чтобы /crash/state мог вернуть результат
 
   clearTimeout(currentCrash.timerId);
   currentCrash = {
@@ -389,6 +394,7 @@ function endCrashRound() {
     timerId: null
   };
 }
+
 
 /**
  * Запускает новый раунд:
@@ -423,6 +429,7 @@ function startNewCrashRound() {
   currentCrash.timerId = setTimeout(endCrashRound, totalDuration);
   currentCrash.ended = false;
   currentCrash.players = [];
+  lastCrashResult = null;
 }
 
 // ========== ЭНДПОЙНТЫ «КРАШ» ==========
