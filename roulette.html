@@ -40,7 +40,10 @@
           <canvas id="canvas" width="300" height="300"></canvas>
           <div class="pointer"></div>
         </div>
-        <div id="legend" style="width:100%"></div>
+        <div class="glass-card" style="width:100%; padding:18px">
+          <p class="muted">Участники и ставки</p>
+          <div id="legend"></div>
+        </div>
       </article>
     </section>
   </div>
@@ -67,42 +70,127 @@
       return 1 - Math.pow(1 - t, 3);
     }
 
+    function lightenColor(color, amount = 0.25) {
+      if (!color || !color.startsWith('#')) return color;
+      const num = parseInt(color.slice(1), 16);
+      let r = (num >> 16) & 0xff;
+      let g = (num >> 8) & 0xff;
+      let b = num & 0xff;
+      r = Math.min(255, Math.floor(r + (255 - r) * amount));
+      g = Math.min(255, Math.floor(g + (255 - g) * amount));
+      b = Math.min(255, Math.floor(b + (255 - b) * amount));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function placeholderSegments() {
+      return Array.from({ length: 6 }, (_, idx) => ({
+        username: '',
+        bet: 1,
+        color: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.12)'
+      }));
+    }
+
     function showMessage(msg, color = '#333') {
       messageEl.textContent = msg;
       messageEl.style.color = color;
     }
 
     // Рисуем колесо
-    function drawWheelByList(list) {
-      ctx.clearRect(0, 0, 300, 300);
-      if (list.length === 0) return;
-      const totalBet = list.reduce((s, p) => s + p.bet, 0);
-      let startAngle = 0;
-      list.forEach(p => {
-        const angle = (p.bet / totalBet) * 2 * Math.PI;
+    function drawWheelByList(list, options = {}) {
+      const { clear = true } = options;
+      if (clear) ctx.clearRect(0, 0, 300, 300);
+      const center = 150;
+      const radius = 130;
+      const segments = list.length ? list : placeholderSegments();
+      const totalBet = segments.reduce((s, p) => s + (p.bet || 1), 0) || 1;
+
+      // base glow
+      const bgGradient = ctx.createRadialGradient(center, center, 20, center, center, radius);
+      bgGradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+      bgGradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+      ctx.beginPath();
+      ctx.arc(center, center, radius, 0, Math.PI * 2);
+      ctx.fillStyle = bgGradient;
+      ctx.fill();
+
+      let startAngle = -Math.PI / 2;
+      segments.forEach((segment) => {
+        const sliceAngle = ((segment.bet || 1) / totalBet) * Math.PI * 2;
+        const endAngle = startAngle + sliceAngle;
+
+        const edgeGradient = ctx.createLinearGradient(
+          center + Math.cos(startAngle) * radius,
+          center + Math.sin(startAngle) * radius,
+          center + Math.cos(endAngle) * radius,
+          center + Math.sin(endAngle) * radius
+        );
+        edgeGradient.addColorStop(0, lightenColor(segment.color, 0.4));
+        edgeGradient.addColorStop(1, segment.color || '#1f1f3a');
+
         ctx.beginPath();
-        ctx.moveTo(150, 150);
-        ctx.arc(150, 150, 150, startAngle, startAngle + angle);
-        ctx.fillStyle = p.color;
+        ctx.moveTo(center, center);
+        ctx.arc(center, center, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = edgeGradient;
         ctx.fill();
-        startAngle += angle;
+
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        startAngle = endAngle;
       });
+
+      // rim highlight
+      ctx.beginPath();
+      ctx.arc(center, center, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // center hub
+      const hubGradient = ctx.createRadialGradient(center, center, 8, center, center, 42);
+      hubGradient.addColorStop(0, '#f5f7ff');
+      hubGradient.addColorStop(1, '#7f5af0');
+      ctx.beginPath();
+      ctx.arc(center, center, 42, 0, Math.PI * 2);
+      ctx.fillStyle = hubGradient;
+      ctx.fill();
+
       renderLegend(list);
     }
 
     // Рисуем легенду
     function renderLegend(list) {
       legendEl.innerHTML = '';
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'legend-item muted';
+        empty.textContent = 'Ожидаем игроков для следующего спина';
+        legendEl.appendChild(empty);
+        return;
+      }
+
       list.forEach(p => {
         const item = document.createElement('div');
         item.className = 'legend-item';
+        const left = document.createElement('div');
+        left.style.display = 'flex';
+        left.style.alignItems = 'center';
+        left.style.gap = '10px';
         const colorBox = document.createElement('div');
         colorBox.className = 'legend-color';
         colorBox.style.backgroundColor = p.color;
-        const text = document.createElement('div');
-        text.textContent = `${p.username}: ${p.bet} 🍬`;
-        item.appendChild(colorBox);
-        item.appendChild(text);
+        const name = document.createElement('div');
+        name.textContent = p.username;
+        left.appendChild(colorBox);
+        left.appendChild(name);
+
+        const bet = document.createElement('strong');
+        bet.textContent = `${p.bet} 🍬`;
+
+        item.appendChild(left);
+        item.appendChild(bet);
         legendEl.appendChild(item);
       });
     }
@@ -240,13 +328,13 @@
         const eased = easeOut(t);
         const currentAngle = currentRotation + (finalRotation - currentRotation) * eased;
 
-        ctx.save();
-        ctx.clearRect(0, 0, 300, 300);
-        ctx.translate(150, 150);
-        ctx.rotate(currentAngle);
-        ctx.translate(-150, -150);
-        drawWheelByList(spinPlayers);
-        ctx.restore();
+      ctx.save();
+      ctx.clearRect(0, 0, 300, 300);
+      ctx.translate(150, 150);
+      ctx.rotate(currentAngle);
+      ctx.translate(-150, -150);
+      drawWheelByList(spinPlayers, { clear: false });
+      ctx.restore();
 
         if (t < 1) {
           requestAnimationFrame(frame);
