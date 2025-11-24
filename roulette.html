@@ -3,99 +3,47 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🎡 Рулетка</title>
+  <title>Рулетка · 320xbet</title>
   <link rel="stylesheet" href="style.css" />
-  <style>
-    .wheel {
-      width: 300px;
-      height: 300px;
-      border-radius: 50%;
-      border: 10px solid #333;
-      margin: 20px auto;
-      position: relative;
-      overflow: hidden;
-    }
-    .wheel canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    .pointer {
-      position: absolute;
-      top: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 0;
-      height: 0;
-      border-left: 20px solid transparent;
-      border-right: 20px solid transparent;
-      border-bottom: 30px solid red;
-    }
-    #message {
-      font-weight: bold;
-      margin-top: 10px;
-      color: #333;
-      text-align: center;
-    }
-    #countdown {
-      font-size: 1rem;
-      color: #555;
-      text-align: center;
-      margin-top: 5px;
-    }
-    #countdown-text {
-      display: inline;
-    }
-    #timer {
-      font-weight: bold;
-      display: inline;
-      margin-left: 5px;
-    }
-    #legend {
-      max-width: 300px;
-      margin: 10px auto;
-      font-size: 0.9rem;
-      text-align: left;
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 4px;
-    }
-    .legend-color {
-      width: 16px;
-      height: 16px;
-      border: 1px solid #000;
-      margin-right: 8px;
-    }
-  </style>
 </head>
 <body>
-  <main>
-    <h1>🎡 Рулетка</h1>
-    <p>Баланс: <span id="balance">...</span> 🍬</p>
+  <div class="game-page">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Режим</p>
+        <h1>🎡 Неон-рулетка</h1>
+        <p class="muted">Чем выше ставка, тем шире сектор на колесе. Собери банк и сорви куш.</p>
+      </div>
+      <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
+    </header>
 
-    <div>
-      <label for="bet">Ставка:</label>
-      <input type="number" id="bet" min="1" placeholder="Введите ставку" />
-      <button id="joinBtn">Присоединиться</button>
-    </div>
-    <div id="countdown">
-      <span id="countdown-text">Ожидание второго игрока…</span>
-      <span id="timer"></span>
-    </div>
+    <section class="crash-layout">
+      <article class="glass-card crash-panel">
+        <div class="balance-pill">Баланс: <span id="balance">...</span> 🍬</div>
 
-    <div class="wheel">
-      <canvas id="canvas" width="300" height="300"></canvas>
-      <div class="pointer"></div>
-    </div>
+        <label for="bet" class="muted">Ставка</label>
+        <div class="inline-form">
+          <input type="number" id="bet" min="1" class="input-field" placeholder="Введите ставку" />
+          <button id="joinBtn" class="btn-primary" style="width:auto">Присоединиться</button>
+        </div>
 
-    <!-- Легенда: для каждого участника цвет и ставка -->
-    <div id="legend"></div>
+        <div id="countdown" class="notice">
+          <span id="countdown-text">Ожидание второго игрока…</span>
+          <span id="timer"></span>
+        </div>
 
-    <p id="message"></p>
-    <button onclick="window.location.href='mainPage.html'">⬅️ Назад</button>
-  </main>
+        <p id="message" class="message"></p>
+      </article>
+
+      <article class="glass-card wheel-wrapper">
+        <div class="wheel">
+          <canvas id="canvas" width="300" height="300"></canvas>
+          <div class="pointer"></div>
+        </div>
+        <div id="legend" style="width:100%"></div>
+      </article>
+    </section>
+  </div>
 
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
