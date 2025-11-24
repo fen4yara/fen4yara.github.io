@@ -4,25 +4,35 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>320xbet</title>
+  <title>320xbet · Вход</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-  <main>
+  <main class="page-shell">
+    <section class="glass-card auth-card">
+      <div class="auth-intro">
+        <p class="eyebrow">Neon Playground</p>
+        <h1>320xbet</h1>
+        <p class="muted">Собирай конфетки в мини-играх «Краш» и «Рулетка». Войди в аккаунт и продолжи путь чемпиона.</p>
+      </div>
 
-    <h1>Вход</h1>
-<!-- Добавим кнопку «Сменить аккаунт» -->
-    <!-- По клику она вызовет logOut(), чтобы очистить текущую сессию (если была) -->
-    <button id="loginAsBtn" style="display: none; margin-bottom: 1em;">
-      <!-- Текст подставится динамически -->
-    </button>
-    <form id="loginForm">
-      <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
-      <input type="password" id="loginPassword" placeholder="Пароль" required />
-      <button type="submit">Войти</button>
-    </form>
-    <p>Нет аккаунта? <a href="registration.html">Регистрация</a></p>
+      <button id="loginAsBtn" class="btn-secondary" style="display:none"></button>
+
+      <form id="loginForm" class="form-grid">
+        <input type="text" id="loginUsername" class="input-field" placeholder="Имя пользователя" required />
+        <input type="password" id="loginPassword" class="input-field" placeholder="Пароль" required />
+        <button type="submit" class="btn-primary">Войти</button>
+      </form>
+
+      <div class="auth-links">
+        <span>Нет аккаунта?</span>
+        <a href="registration.html">Зарегистрироваться</a>
+      </div>
+      <div class="auth-links">
+        <span>Администрация</span>
+        <a href="admin.html">Панель управления</a>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -43,15 +53,10 @@
         });
 
         if (resp.ok) {
-          // Если уже авторизован (по сессии или IP), показываем кнопку «Войти как 'nickname'»
           const userData = await resp.json();
           const loginAsBtn = document.getElementById('loginAsBtn');
-          loginAsBtn.textContent = `Войти как '${userData.username}'`;
+          loginAsBtn.textContent = `Продолжить как ${userData.username}`;
           loginAsBtn.style.display = 'block';
-
-          // Скрываем форму входа, чтобы не путать пользователя
-
-          // При клике переходим на mainPage.html
           loginAsBtn.addEventListener('click', () => {
             window.location.href = 'mainPage.html';
           });
