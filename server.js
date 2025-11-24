@@ -1,655 +1,515 @@
-// server.js
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const session = require('express-session');
-const cors = require('cors');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-const ADMIN_LOGIN = '123456';
-const ADMIN_PASSWORD = '123456';
-
-// --------------- CORS ---------------
-const corsOptions = {
-  origin: 'https://fen4yaragithubio-production-9286.up.railway.app',
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
-app.use(express.json());
-app.use(
-  session({
-    secret: 'mySecretKey',
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }
-  })
-);
-app.use(express.static(path.join(__dirname)));
-
-const usersFile = path.join(__dirname, 'data', 'users.json');
-const ensureUsersFileExists = () => {
-  const dir = path.join(__dirname, 'data');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-  if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '[]', 'utf-8');
-};
-ensureUsersFileExists();
-
-function readUsers() {
-  const data = fs.readFileSync(usersFile, 'utf-8');
-  return JSON.parse(data || '[]');
-}
-function writeUsers(arr) {
-  fs.writeFileSync(usersFile, JSON.stringify(arr, null, 2), 'utf-8');
-}
-function findUser(username) {
-  const users = readUsers();
-  return users.find((u) => u.username === username);
-}
-function updateUserBalance(username, newBalance) {
-  const users = readUsers();
-  const idx = users.findIndex((u) => u.username === username);
-  if (idx !== -1) {
-    users[idx].balance = newBalance;
-    writeUsers(users);
-    return true;
-  }
-  return false;
+:root {
+  --bg: radial-gradient(circle at top, #1c1b46, #050608 55%);
+  --card-bg: rgba(12, 13, 32, 0.85);
+  --card-border: rgba(255, 255, 255, 0.1);
+  --card-highlight: rgba(97, 162, 255, 0.25);
+  --text-main: #f5f7ff;
+  --text-muted: rgba(245, 247, 255, 0.7);
+  --accent: #7f5af0;
+  --accent-strong: #ff5f9e;
+  --success: #4ade80;
+  --danger: #f87171;
+  --glass-blur: blur(18px);
+  --shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
 }
 
-function requireAdmin(req, res, next) {
-  if (!req.session.admin) {
-    return res.status(401).json({ error: 'Нет доступа' });
-  }
-  next();
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-// ======= регистрация / login / check-auth / logout =======
-app.post('/register', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
-  }
-
-  const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-
-  try {
-    const all = readUsers();
-
-    // Проверяем, не занят ли username
-    if (all.find((u) => u.username === username)) {
-      return res.status(400).json({ error: 'Пользователь уже существует' });
-    }
-
-    // Клиент уже передаёт SHA-256‐хэш
-    const passwordHash = password;
-
-    all.push({ username, passwordHash, balance: 1000, ip: userIP });
-    writeUsers(all);
-
-    res.json({ message: 'Регистрация успешна!' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка сервера при регистрации' });
-  }
-});
-
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ error: 'Username and password are required' });
-
-  try {
-    const user = findUser(username);
-    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-
-    // Сравниваем хэши паролей
-    if (user.passwordHash !== password) {
-      return res.status(401).json({ error: 'Неверный пароль' });
-    }
-
-    // Устанавливаем сессию
-    req.session.user = { username: user.username };
-    res.json({
-      message: 'Аутентификация успешна',
-      user: { username: user.username, balance: user.balance }
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка сервера при логине' });
-  }
-});
-
-app.get('/check-auth', (req, res) => {
-  // 1) Если сессия уже есть — возвращаем данные пользователя
-  if (req.session.user) {
-    try {
-      const user = findUser(req.session.user.username);
-      if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-      return res.json({ username: user.username, balance: user.balance });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Ошибка сервера при проверке авторизации' });
-    }
-  }
-
-  // 2) Если сессии нет — пробуем «авто-логин» по IP
-  const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  const all = readUsers();
-  const user = all.find((u) => u.ip === userIP);
-
-  if (user) {
-    req.session.user = { username: user.username };
-    return res.json({ username: user.username, balance: user.balance });
-  }
-
-  // 3) Если ни сессии, ни IP совпадения — не авторизован
-  return res.status(401).json({ error: 'Не авторизован' });
-});
-
-app.post('/logout', (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Ошибка при выходе' });
-    }
-    res.clearCookie('connect.sid');
-    res.json({ message: 'Выход выполнен' });
-  });
-});
-// ======= конец auth =======
-
-// ======= админ-панель =======
-app.post('/admin/login', (req, res) => {
-  const { login, password } = req.body;
-  if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
-    req.session.admin = true;
-    return res.json({ message: 'Администратор авторизован' });
-  }
-  return res.status(401).json({ error: 'Неверный логин или пароль' });
-});
-
-app.post('/admin/logout', (req, res) => {
-  req.session.admin = false;
-  res.json({ message: 'Админ вышел' });
-});
-
-app.get('/admin/session', (req, res) => {
-  if (req.session.admin) {
-    return res.json({ authorized: true });
-  }
-  return res.status(401).json({ authorized: false });
-});
-
-app.get('/admin/users', requireAdmin, (req, res) => {
-  const users = readUsers().map(({ username, balance }) => ({ username, balance }));
-  res.json(users);
-});
-
-app.patch('/admin/users/:username', requireAdmin, (req, res) => {
-  const { username } = req.params;
-  const { balance } = req.body;
-  if (typeof balance !== 'number' || balance < 0) {
-    return res.status(400).json({ error: 'Некорректный баланс' });
-  }
-  const users = readUsers();
-  const idx = users.findIndex((u) => u.username === username);
-  if (idx === -1) {
-    return res.status(404).json({ error: 'Пользователь не найден' });
-  }
-  users[idx].balance = balance;
-  writeUsers(users);
-  res.json({ username: users[idx].username, balance: users[idx].balance });
-});
-// ======= конец админки =======
-
-let roulettePlayers = []; // текущая очередь: [{ username, bet, color }]
-let lastSpinPlayers = null; // «снимок» очереди перед спином
-let lastSpinResult = null; // { winner, totalBet, timestamp, players: lastSpinPlayers }
-const spinInterval = 20000; // 20 сек
-
-let nextSpin = null; // временная метка (ms) следующего запланированного спина
-let spinTimeoutId = null;
-
-// Генератор случайного цвета
-function getRandomColor() {
-  const letters = '0123456789ABCDEF';
-  let color = '#';
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text-main);
+  min-height: 100vh;
+  margin: 0;
+  padding: 32px;
+  line-height: 1.5;
+  background-attachment: fixed;
 }
 
-/**
- * Запускает спин. Если игроков < 2 — очищает очередь без результата.
- * Иначе сохраняет snapshot → выбирает победителя → обновляет баланс → сохраняет результат.
- */
-function runSpin() {
-  const now = Date.now();
+a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
 
-  if (roulettePlayers.length < 2) {
-    roulettePlayers = [];
-    lastSpinResult = null;
-    lastSpinPlayers = null;
-  } else {
-    lastSpinPlayers = roulettePlayers.map((p) => ({ ...p }));
+a:hover {
+  color: var(--accent-strong);
+}
 
-    const totalBet = roulettePlayers.reduce((sum, p) => sum + p.bet, 0);
-    const randomAngle = Math.random() * 2 * Math.PI;
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  margin: 0 0 12px;
+}
 
-    let angleSum = 0;
-    let winnerEntry = lastSpinPlayers[lastSpinPlayers.length - 1];
-    for (let p of lastSpinPlayers) {
-      const sliceAngle = (p.bet / totalBet) * 2 * Math.PI;
-      if (randomAngle >= angleSum && randomAngle < angleSum + sliceAngle) {
-        winnerEntry = p;
-        break;
-      }
-      angleSum += sliceAngle;
-    }
+p {
+  margin: 0 0 12px;
+}
 
-    const winUser = findUser(winnerEntry.username);
-    if (winUser) {
-      updateUserBalance(winnerEntry.username, winUser.balance + totalBet);
-    }
+.page-shell {
+  width: min(100%, 420px);
+  margin: 0 auto;
+}
 
-    lastSpinResult = {
-      winner: winnerEntry.username,
-      totalBet: totalBet,
-      timestamp: now,
-      players: lastSpinPlayers
-    };
+.dashboard-shell {
+  width: min(100%, 1100px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 
-    roulettePlayers = [];
+.game-page {
+  width: min(100%, 1000px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.glass-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass-blur);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 60%, rgba(255, 255, 255, 0.08));
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.glass-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.eyebrow {
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.input-field {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  font-size: 1rem;
+  transition: border 0.2s, transform 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+button {
+  border: none;
+  border-radius: 16px;
+  padding: 14px 18px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #9d7bff);
+  color: #fff;
+  box-shadow: 0 15px 30px rgba(127, 90, 240, 0.4);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff4f8b, #ff9154);
+  color: #fff;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+button.start {
+  background: linear-gradient(135deg, var(--accent), #9d7bff);
+  color: #fff;
+  box-shadow: 0 15px 30px rgba(127, 90, 240, 0.35);
+}
+
+button.cashout {
+  background: linear-gradient(135deg, #34d399, #059669);
+  color: #02130c;
+  box-shadow: 0 15px 30px rgba(34, 197, 94, 0.35);
+}
+
+.auth-card {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-intro h1 {
+  font-size: 2.4rem;
+  margin-bottom: 8px;
+}
+
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-grid,
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 20px;
+}
+
+.stat-card h2 {
+  font-size: 2.2rem;
+  margin-bottom: 4px;
+}
+
+.stat-subtext {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.game-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.game-card .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.game-card button {
+  margin-top: auto;
+}
+
+.crash-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.crash-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.balance-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.player-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.history-card .history-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 0;
+}
+
+.history-card .history-item:last-child {
+  border-bottom: none;
+}
+
+.history-players {
+  padding-left: 18px;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.wheel-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.wheel {
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  position: relative;
+  background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.15), rgba(0, 0, 0, 0.85));
+  border: 12px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 0 60px rgba(0, 0, 0, 0.8),
+    0 30px 45px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.wheel::after {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+}
+
+.wheel canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.45));
+}
+
+.pointer {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-bottom: 55px solid var(--accent-strong);
+  filter: drop-shadow(0 12px 25px rgba(255, 95, 158, 0.45));
+}
+
+#legend {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.legend-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+
+.chart-wrapper {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+#coefChart {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+
+.admin-shell {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 12px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-table input {
+  width: 120px;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.notice {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.message {
+  text-align: center;
+  font-weight: 600;
+}
+
+.message.success {
+  color: var(--success);
+}
+
+.message.error {
+  color: var(--danger);
+}
+
+.pill {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+}
+
+.inline-form {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.inline-form button {
+  width: auto;
+  padding: 10px 18px;
+}
+
+.link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  body {
+    padding: 20px 16px 40px;
   }
 
-  nextSpin = null;
-  spinTimeoutId = null;
+  .glass-card {
+    border-radius: 18px;
+    padding: 20px;
+  }
 
-  if (roulettePlayers.length >= 2) {
-    nextSpin = Date.now() + spinInterval;
-    spinTimeoutId = setTimeout(runSpin, spinInterval);
+  .top-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
-// Первый спин стартует внутри /roulette/join при появлении второго игрока.
-
-// ========== ЭНДПОЙНТЫ ==========
-
-// 1) Получить текущих игроков + nextSpin + serverTime
-app.get('/roulette/players', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  res.json({
-    players: roulettePlayers,
-    nextSpin,
-    serverTime: Date.now()
-  });
-});
-
-// 2) Игрок присоединяется к спину
-app.post('/roulette/join', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  const username = req.session.user.username;
-  const { bet } = req.body;
-  if (!bet || typeof bet !== 'number' || bet <= 0) {
-    return res.status(400).json({ error: 'Некорректная ставка' });
-  }
-  const user = findUser(username);
-  if (!user) {
-    return res.status(404).json({ error: 'Пользователь не найден' });
-  }
-  if (user.balance < bet) {
-    return res.status(400).json({ error: 'Недостаточно средств' });
+@media (max-width: 520px) {
+  .wheel {
+    width: 260px;
+    height: 260px;
   }
 
-  updateUserBalance(username, user.balance - bet);
-
-  const existing = roulettePlayers.find((p) => p.username === username);
-  if (existing) {
-    existing.bet += bet;
-  } else {
-    roulettePlayers.push({ username, bet, color: getRandomColor() });
+  .page-shell,
+  .dashboard-shell,
+  .game-page,
+  .admin-shell {
+    width: 100%;
   }
-
-  if (roulettePlayers.length === 2 && nextSpin === null) {
-    nextSpin = Date.now() + spinInterval;
-    spinTimeoutId = setTimeout(runSpin, spinInterval);
-  }
-
-  res.json({
-    players: roulettePlayers,
-    nextSpin,
-    serverTime: Date.now()
-  });
-});
-
-// 3) Получить nextSpin + serverTime
-app.get('/roulette/next-spin', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  res.json({ nextSpin, serverTime: Date.now() });
-});
-
-// 4) Получить последний результат спина
-app.get('/roulette/result', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  if (!lastSpinResult) {
-    return res.status(404).json({ error: 'Результат пока недоступен' });
-  }
-  res.json(lastSpinResult);
-});
-
-/**
- * === Глобальный «КРАШ» ===
- * Логика: 
- * - currentCrash хранит текущий раунд (players, startTime, crashPoint, ended).
- * - Когда первый игрок делает join -> генерируем crashPoint, запоминаем startTime, запускаем таймер (например, 10 сек).
- * - Если через 10 сек никто не забылся (cashout), то в момент timeout всем участникам считается, что они проиграли.
- * - Если кто-то сделал cashout раньше, он получает свой выигрыш (и помечен как «выкупившийся»).
- * - После завершения (через 10 сек) формируем запись в crashHistory, сбрасываем currentCrash, чтобы в следующий раз создать новый при join.
- * - crashHistory держит последние 5 раундов.
- */
-
-
-const BET_DELAY    = 10 * 1000;    // 10 сек фаза ставок
-const BASE_SPEED   = 0.05;          // базовая скорость (в 1/sec)
-const ACCEL        = 0.08;         // ускорение (в 1/sec²)
-
-let currentCrash = {
-  players: [],        // { username, bet, color, cashedOut, cashoutCoef, winnings }
-  bettingEndTime: null, // когда завершается фаза ставок (timestamp)
-  crashTime: null,    // когда наступит краш (timestamp)
-  crashPoint: null,   // целевой коэффициент
-  ended: true,        // true – раунд не идёт, false – фаза ставок или рост
-  timerId: null       // setTimeout ID, чтобы можно было clearTimeout
-};
-
-let crashHistory = [];
-let lastCrashResult = null;// последние 5 раундов: 
-// { timestamp, crashPoint, totalBet, players: [ { username, bet, cashedOut, cashoutCoef, winnings, color } ] }
-
-
-function getRandomColor() {
-  const letters = '0123456789ABCDEF';
-  let color = '#';
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
 }
-
-function generateCrashPoint() {
-  const rand = Math.random() * 100;
-  let cp;
-  if (rand <= 75) {
-    cp = Math.random() * (2 - 1) + 1;
-  } else if (rand <= 90) {
-    cp = Math.random() * (5 - 3) + 3;
-  } else if (rand <= 95) {
-    cp = Math.random() * (10 - 5) + 5;
-  } else if (rand <= 98) {
-    cp = Math.random() * (50 - 10) + 10;
-  } else {
-    cp = Math.random() * (1500 - 50) + 50;
-  }
-  return parseFloat(cp.toFixed(2));
-}
-
-/**
- * Завершает раунд: сохраняем в историю и сбрасываем currentCrash.
- */
-function endCrashRound() {
-  if (currentCrash.ended) return;
-
-  const now = Date.now();
-  const timestamp = now;
-  const totalBet = currentCrash.players.reduce((sum, p) => sum + p.bet, 0);
-
-  const snapshot = currentCrash.players.map((p) => ({
-    username: p.username,
-    bet: p.bet,
-    cashedOut: p.cashedOut,
-    cashoutCoef: p.cashedOut ? p.cashoutCoef : null,
-    winnings: p.cashedOut ? p.winnings : 0,
-    color: p.color
-  }));
-
-  const result = {
-    timestamp,
-    crashPoint: currentCrash.crashPoint,
-    totalBet,
-    players: snapshot
-  };
-
-  crashHistory.unshift(result);
-  if (crashHistory.length > 5) crashHistory.pop();
-
-  lastCrashResult = result; // сохраняем, чтобы /crash/state мог вернуть результат
-
-  clearTimeout(currentCrash.timerId);
-  currentCrash = {
-    players: [],
-    bettingEndTime: null,
-    crashTime: null,
-    crashPoint: null,
-    ended: true,
-    timerId: null
-  };
-}
-
-
-/**
- * Запускает новый раунд:
- * 1) Генерация crashPoint.
- * 2) Вычисление T (в секундах), через которое coef = crashPoint:
- *       0.5*ACCEL*T² + BASE_SPEED*T + 1 - crashPoint = 0
- *    Решаем для T, берём положительный корень.
- * 3) Устанавливаем bettingEndTime = now + BET_DELAY.
- *    crashTime = bettingEndTime + T*1000.
- * 4) Ставим таймер setTimeout(endCrashRound, BET_DELAY + T*1000).
- */
-function startNewCrashRound() {
-  const now = Date.now();
-  const cp = generateCrashPoint();
-  currentCrash.crashPoint = cp;
-  currentCrash.bettingEndTime = now + BET_DELAY;
-
-  // Решаем квадратичное уравнение: 0.5·a·T² + b·T + (1 - cp) = 0, где b = BASE_SPEED, a = ACCEL
-  const a = ACCEL / 2.0;
-  const b = BASE_SPEED;
-  const c = 1 - cp;
-
-  const discriminant = b*b - 4*a*c;
-  // Гарантированно discriminant ≥ 0, т.к. cp > 1, ACCEL > 0.
-  const sqrtD = Math.sqrt(discriminant);
-  const T = (-b + sqrtD) / (2*a); // положительный корень (T > 0)
-
-  const timeToCrashMs = Math.floor(T * 1000);
-  currentCrash.crashTime = currentCrash.bettingEndTime + timeToCrashMs;
-
-  const totalDuration = BET_DELAY + timeToCrashMs;
-  currentCrash.timerId = setTimeout(endCrashRound, totalDuration);
-  currentCrash.ended = false;
-  currentCrash.players = [];
-  lastCrashResult = null;
-}
-
-// ========== ЭНДПОЙНТЫ «КРАШ» ==========
-
-// GET /crash/state → текущее состояние
-app.get('/crash/state', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  res.json({
-    players: currentCrash.players.map((p) => ({
-      username: p.username,
-      bet: p.bet,
-      color: p.color,
-      cashedOut: p.cashedOut,
-      cashoutCoef: p.cashoutCoef,
-      winnings: p.winnings
-    })),
-    bettingEndTime: currentCrash.bettingEndTime,
-    crashTime: currentCrash.crashTime,
-    crashPoint: currentCrash.ended ? currentCrash.crashPoint : null,
-    ended: currentCrash.ended,
-    serverTime: Date.now()
-  });
-});
-
-// POST /crash/join { bet }
-app.post('/crash/join', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  const username = req.session.user.username;
-  const { bet } = req.body;
-  if (!bet || typeof bet !== 'number' || bet <= 0) {
-    return res.status(400).json({ error: 'Некорректная ставка' });
-  }
-  const user = findUser(username);
-  if (!user) {
-    return res.status(404).json({ error: 'Пользователь не найден' });
-  }
-  if (user.balance < bet) {
-    return res.status(400).json({ error: 'Недостаточно средств' });
-  }
-
-  const now = Date.now();
-
-  // Если раунд не идёт – запускаем новый
-  if (currentCrash.ended) {
-    startNewCrashRound();
-  }
-
-  // Если уже позже, чем конец фазы ставок – отказ
-  if (now > currentCrash.bettingEndTime) {
-    return res.status(400).json({ error: 'Зона ставок закрыта, дождитесь следующего раунда' });
-  }
-
-  // Списываем баланс
-  updateUserBalance(username, user.balance - bet);
-
-  // Добавляем/увеличиваем ставку участника
-  let existing = currentCrash.players.find((p) => p.username === username);
-  if (existing) {
-    existing.bet += bet;
-  } else {
-    currentCrash.players.push({
-      username,
-      bet,
-      color: getRandomColor(),
-      cashedOut: false,
-      cashoutCoef: null,
-      winnings: 0
-    });
-  }
-
-  res.json({
-    message: 'Ставка принята',
-    players: currentCrash.players.map((p) => ({
-      username: p.username,
-      bet: p.bet,
-      color: p.color,
-      cashedOut: p.cashedOut,
-      cashoutCoef: p.cashoutCoef,
-      winnings: p.winnings
-    })),
-    bettingEndTime: currentCrash.bettingEndTime,
-    crashTime: currentCrash.crashTime,
-    ended: currentCrash.ended,
-    serverTime: Date.now()
-  });
-});
-
-// POST /crash/cashout { coefficient }
-app.post('/crash/cashout', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  const username = req.session.user.username;
-  const { coefficient } = req.body;
-  if (typeof coefficient !== 'number' || coefficient <= 1) {
-    return res.status(400).json({ error: 'Некорректный коэффициент' });
-  }
-
-  if (currentCrash.ended) {
-    return res.status(400).json({ error: 'Раунд уже завершён' });
-  }
-
-  const now = Date.now();
-
-  // Если мы ещё в фазе ставок, cashout невозможен
-  if (now < currentCrash.bettingEndTime) {
-    return res.status(400).json({ error: 'Ещё не начался рост коэффициента' });
-  }
-
-  // Если уже после crashTime, никто не может забрать
-  if (now >= currentCrash.crashTime) {
-    const participantLate = currentCrash.players.find((p) => p.username === username);
-    if (participantLate) {
-      participantLate.cashedOut = false;
-      participantLate.cashoutCoef = null;
-      participantLate.winnings = 0;
-    }
-    return res.status(400).json({ error: 'Уже крашнулся, нет выплат' });
-  }
-
-  // Находим участника
-  const participant = currentCrash.players.find((p) => p.username === username);
-  if (!participant) {
-    return res.status(400).json({ error: 'Вы не участвуете в текущем раунде' });
-  }
-  if (participant.cashedOut) {
-    return res.status(400).json({ error: 'Вы уже забрали' });
-  }
-
-  // Если заявленный коэффициент ≥ crashPoint – опоздал
-  if (coefficient >= currentCrash.crashPoint) {
-    participant.cashedOut = false;
-    participant.cashoutCoef = null;
-    participant.winnings = 0;
-    return res.status(400).json({ error: 'Уже крашнулся, нет выплат' });
-  }
-
-  // Иначе считаем выигрыш
-  const winnings = Math.floor(participant.bet * coefficient);
-  const userObj = findUser(username);
-  if (userObj) {
-    updateUserBalance(username, userObj.balance + winnings);
-  }
-  participant.cashedOut = true;
-  participant.cashoutCoef = coefficient;
-  participant.winnings = winnings;
-
-  res.json({ winnings, newBalance: findUser(username).balance });
-});
-
-// GET /crash/history → последние 5 раундов
-app.get('/crash/history', (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-  res.json(crashHistory);
-});
-
-// === По умолчанию — отдаём index.html на корень ===
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
-});
