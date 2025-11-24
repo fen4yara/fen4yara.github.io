@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ · 320xbet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Панель управления</p>
+        <h1>Админ меню</h1>
+        <p class="muted">Войдите с общим паролем 123456/123456, чтобы посмотреть пользователей и оперативно менять баланс.</p>
+      </div>
+      <div class="link-row">
+        <a href="index.html" class="muted">← вернуться на сайт</a>
+      </div>
+    </header>
+
+    <section class="glass-card auth-card" id="adminLoginSection">
+      <div>
+        <p class="eyebrow">Вход администратора</p>
+        <p class="muted">Данные логина не связаны с обычными аккаунтами.</p>
+      </div>
+      <form id="adminLoginForm" class="form-grid">
+        <input type="text" id="adminLogin" class="input-field" placeholder="Логин (123456)" required />
+        <input type="password" id="adminPassword" class="input-field" placeholder="Пароль (123456)" required />
+        <button type="submit" class="btn-primary">Войти в панель</button>
+      </form>
+      <p id="adminLoginMessage" class="message"></p>
+    </section>
+
+    <section class="glass-card" id="adminPanelSection" style="display:none">
+      <div class="top-bar" style="gap:12px">
+        <div>
+          <p class="eyebrow">Список игроков</p>
+          <p class="muted">Изменяйте баланс в пару кликов. Все изменения пишутся напрямую в users.json.</p>
+        </div>
+        <div class="admin-actions">
+          <button id="refreshBtn" class="btn-secondary" style="width:auto">Обновить список</button>
+          <button id="adminLogoutBtn" class="btn-outline" style="width:auto">Выйти</button>
+        </div>
+      </div>
+
+      <div class="notice">
+        Внимание: изменения баланса вступают в силу мгновенно. Вводите только целые неотрицательные значения.
+      </div>
+
+      <div class="table-wrapper" style="overflow-x:auto">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Пользователь</th>
+              <th>Текущий баланс</th>
+              <th>Новый баланс</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="usersTable"></tbody>
+        </table>
+      </div>
+      <p id="adminPanelMessage" class="message"></p>
+    </section>
+  </div>
+
+  <script>
+    const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
+    const adminLoginSection = document.getElementById('adminLoginSection');
+    const adminPanelSection = document.getElementById('adminPanelSection');
+    const adminLoginForm = document.getElementById('adminLoginForm');
+    const adminLoginMessage = document.getElementById('adminLoginMessage');
+    const adminPanelMessage = document.getElementById('adminPanelMessage');
+    const usersTable = document.getElementById('usersTable');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const logoutBtn = document.getElementById('adminLogoutBtn');
+
+    async function fetchUsers() {
+      const resp = await fetch(`${BASE_URL}/admin/users`, { credentials: 'include' });
+      if (!resp.ok) {
+        throw new Error('Нет доступа');
+      }
+      return resp.json();
+    }
+
+    function renderUsers(users) {
+      usersTable.innerHTML = '';
+      users.forEach(({ username, balance }) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${username}</td>
+          <td>${balance} 🍬</td>
+          <td><input type="number" min="0" class="input-field" value="${balance}" data-username="${username}" /></td>
+          <td><button class="btn-primary" data-username="${username}">Сохранить</button></td>
+        `;
+        usersTable.appendChild(tr);
+      });
+    }
+
+    function togglePanels(isAdmin) {
+      adminLoginSection.style.display = isAdmin ? 'none' : '';
+      adminPanelSection.style.display = isAdmin ? '' : 'none';
+    }
+
+    async function init() {
+      try {
+        const users = await fetchUsers();
+        renderUsers(users);
+        togglePanels(true);
+      } catch (err) {
+        console.warn('Admin auth check failed:', err.message);
+        togglePanels(false);
+      }
+    }
+
+    adminLoginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      adminLoginMessage.textContent = '';
+      const login = document.getElementById('adminLogin').value.trim();
+      const password = document.getElementById('adminPassword').value.trim();
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ login, password })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка входа');
+        }
+        adminLoginMessage.textContent = data.message;
+        adminLoginMessage.className = 'message success';
+        const users = await fetchUsers();
+        renderUsers(users);
+        togglePanels(true);
+      } catch (err) {
+        adminLoginMessage.textContent = err.message;
+        adminLoginMessage.className = 'message error';
+      }
+    });
+
+    refreshBtn.addEventListener('click', async () => {
+      adminPanelMessage.textContent = '';
+      try {
+        const users = await fetchUsers();
+        renderUsers(users);
+        adminPanelMessage.textContent = 'Список обновлён.';
+        adminPanelMessage.className = 'message success';
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    });
+
+    usersTable.addEventListener('click', async (e) => {
+      if (e.target.tagName !== 'BUTTON') return;
+      const username = e.target.getAttribute('data-username');
+      const input = usersTable.querySelector(`input[data-username="${username}"]`);
+      const balanceValue = Number(input.value);
+      if (!Number.isFinite(balanceValue) || balanceValue < 0) {
+        adminPanelMessage.textContent = 'Введите корректный баланс.';
+        adminPanelMessage.className = 'message error';
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(username)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ balance: balanceValue })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Не удалось сохранить');
+        }
+        adminPanelMessage.textContent = `Баланс ${data.username} обновлён: ${data.balance} 🍬`;
+        adminPanelMessage.className = 'message success';
+        input.value = data.balance;
+        input.parentElement.previousElementSibling.textContent = `${data.balance} 🍬`;
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await fetch(`${BASE_URL}/admin/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      togglePanels(false);
+      adminPanelMessage.textContent = '';
+      adminLoginMessage.textContent = 'Вы вышли из панели.';
+      adminLoginMessage.className = 'message';
+    });
+
+    init();
+  </script>
+</body>
+</html>
+
