@@ -7,6 +7,8 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ADMIN_LOGIN = '123456';
+const ADMIN_PASSWORD = '123456';
 
 // --------------- CORS ---------------
 const corsOptions = {
@@ -56,6 +58,13 @@ function updateUserBalance(username, newBalance) {
     return true;
   }
   return false;
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.session.admin) {
+    return res.status(401).json({ error: 'Нет доступа' });
+  }
+  next();
 }
 
 // ======= регистрация / login / check-auth / logout =======
@@ -152,6 +161,50 @@ app.post('/logout', (req, res) => {
   });
 });
 // ======= конец auth =======
+
+// ======= админ-панель =======
+app.post('/admin/login', (req, res) => {
+  const { login, password } = req.body;
+  if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
+    req.session.admin = true;
+    return res.json({ message: 'Администратор авторизован' });
+  }
+  return res.status(401).json({ error: 'Неверный логин или пароль' });
+});
+
+app.post('/admin/logout', (req, res) => {
+  req.session.admin = false;
+  res.json({ message: 'Админ вышел' });
+});
+
+app.get('/admin/session', (req, res) => {
+  if (req.session.admin) {
+    return res.json({ authorized: true });
+  }
+  return res.status(401).json({ authorized: false });
+});
+
+app.get('/admin/users', requireAdmin, (req, res) => {
+  const users = readUsers().map(({ username, balance }) => ({ username, balance }));
+  res.json(users);
+});
+
+app.patch('/admin/users/:username', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const { balance } = req.body;
+  if (typeof balance !== 'number' || balance < 0) {
+    return res.status(400).json({ error: 'Некорректный баланс' });
+  }
+  const users = readUsers();
+  const idx = users.findIndex((u) => u.username === username);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  users[idx].balance = balance;
+  writeUsers(users);
+  res.json({ username: users[idx].username, balance: users[idx].balance });
+});
+// ======= конец админки =======
 
 let roulettePlayers = []; // текущая очередь: [{ username, bet, color }]
 let lastSpinPlayers = null; // «снимок» очереди перед спином
@@ -592,9 +645,9 @@ app.get('/crash/history', (req, res) => {
   res.json(crashHistory);
 });
 
-// === По умолчанию — отдаём login.html на корень ===
+// === По умолчанию — отдаём index.html на корень ===
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, () => {
