@@ -4,64 +4,47 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
-  <title>Краш 🚀</title>
-  <style>
-    /* (тот же CSS, что был) */
-    body { font-family: Arial, sans-serif; padding:20px; }
-    h1 { text-align:center; }
-    .balance { font-size:18px; margin-bottom:20px; }
-    .crash-area { padding:20px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); max-width:400px; margin:auto; }
-    .crash-area label{font-weight:bold}
-    .crash-area input{width:100%; padding:8px; font-size:16px; margin-top:5px; border:1px solid #ccc; border-radius:4px;}
-    .buttons { margin:15px 0; text-align:center; }
-    .buttons button{ padding:10px 20px; font-size:16px; margin:0 10px; border:none; border-radius:4px; cursor:pointer;}
-    #actionBtn.start{ background:#007bff; color:#fff; }
-    #actionBtn.cashout{ background:#28a745; color:#fff; }
-    #message{ font-weight:bold; margin-top:10px; color:#333; text-align:center;}
-    .coef-display{ font-size:24px; text-align:center; margin-top:10px;}
-    .players-list{ margin-top:20px; }
-    .player-row{ display:flex; align-items:center; margin-bottom:5px; }
-    .player-color{ width:16px; height:16px; border-radius:50%; display:inline-block; margin-right:8px; }
-    .history-area{ padding:20px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); max-width:600px; margin:30px auto 0; }
-    .history-area h2{ margin-bottom:10px; }
-    .history-list{ list-style:none; padding:0; }
-    .history-item{ margin-bottom:15px; border-bottom:1px solid #ddd; padding-bottom:10px; }
-    .history-players{ margin-top:5px; padding-left:20px; }
-    .back-button{ margin-top:20px; text-align:center; }
-    .back-button button{ padding:10px 20px; font-size:16px; border:none; border-radius:4px; background:#6c757d; color:#fff; cursor:pointer; }
-  </style>
+  <title>Краш · 320xbet</title>
 </head>
 <body>
-  <h1>🚀 Глобальный Краш</h1>
+  <div class="game-page">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Режим</p>
+        <h1>🚀 Глобальный краш</h1>
+        <p class="muted">Ставь конфетки, следи за ростом коэффициента и забирай награду до взрыва.</p>
+      </div>
+      <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
+    </header>
 
-  <div class="balance">
-    Баланс: <span id="balance">...</span> 🍬
-  </div>
+    <section class="crash-layout">
+      <article class="glass-card crash-panel">
+        <div class="balance-pill">
+          Баланс: <span id="balance">...</span> 🍬
+        </div>
 
-  <div class="crash-area">
-    <label for="bet">Ставка:</label>
-    <input type="number" id="bet" min="1" placeholder="Введите ставку" />
-    <div class="buttons">
-      <button id="actionBtn" class="start">Поставить</button>
-    </div>
-    <div class="coef-display">
-      Коэффициент: <span id="coefficient">1.00</span>x
-    </div>
-    <p id="message"></p>
+        <label for="bet" class="muted">Размер ставки</label>
+        <input type="number" id="bet" min="1" class="input-field" placeholder="Введите ставку" />
+        <button id="actionBtn" class="start">Поставить</button>
 
-    <div class="players-list">
-      <h3>Участники раунда:</h3>
-      <div id="playersContainer"></div>
-    </div>
-  </div>
+        <div>
+          <p class="muted">Коэффициент</p>
+          <h2><span id="coefficient">1.00</span>x</h2>
+        </div>
 
-  <div class="history-area">
-    <h2>История последних 5 раундов</h2>
-    <ul class="history-list" id="historyList"></ul>
-  </div>
+        <p id="message" class="message"></p>
 
-  <div class="back-button">
-    <button onclick="window.location.href='mainPage.html'">⬅️ Назад</button>
+        <div>
+          <p class="muted">Участники раунда</p>
+          <div id="playersContainer" class="players-list"></div>
+        </div>
+      </article>
+
+      <article class="glass-card history-card">
+        <p class="eyebrow">Последние результаты</p>
+        <div id="historyList" class="history-list"></div>
+      </article>
+    </section>
   </div>
 
 <script>
