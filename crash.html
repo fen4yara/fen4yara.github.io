@@ -1,203 +1,580 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Админ · 320xbet</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Краш · 320xbet</title>
 </head>
 <body>
-  <div class="admin-shell">
+  <div class="game-page">
     <header class="glass-card top-bar">
       <div>
-        <p class="eyebrow">Панель управления</p>
-        <h1>Админ меню</h1>
-        <p class="muted">Войдите с общим паролем 123456/123456, чтобы посмотреть пользователей и оперативно менять баланс.</p>
+        <p class="eyebrow">Режим</p>
+        <h1>🚀 Глобальный краш</h1>
+        <p class="muted">Ставь конфетки, следи за ростом коэффициента и забирай награду до взрыва.</p>
       </div>
-      <div class="link-row">
-        <a href="index.html" class="muted">← вернуться на сайт</a>
-      </div>
+      <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
     </header>
 
-    <section class="glass-card auth-card" id="adminLoginSection">
-      <div>
-        <p class="eyebrow">Вход администратора</p>
-        <p class="muted">Данные логина не связаны с обычными аккаунтами.</p>
-      </div>
-      <form id="adminLoginForm" class="form-grid">
-        <input type="text" id="adminLogin" class="input-field" placeholder="Логин (123456)" required />
-        <input type="password" id="adminPassword" class="input-field" placeholder="Пароль (123456)" required />
-        <button type="submit" class="btn-primary">Войти в панель</button>
-      </form>
-      <p id="adminLoginMessage" class="message"></p>
-    </section>
+    <section class="crash-layout">
+      <article class="glass-card crash-panel">
+        <div class="balance-pill">
+          Баланс: <span id="balance">...</span> 🍬
+        </div>
 
-    <section class="glass-card" id="adminPanelSection" style="display:none">
-      <div class="top-bar" style="gap:12px">
+        <label for="bet" class="muted">Размер ставки</label>
+        <input type="number" id="bet" min="1" class="input-field" placeholder="Введите ставку" />
+        <button id="actionBtn" class="start">Поставить</button>
+
         <div>
-          <p class="eyebrow">Список игроков</p>
-          <p class="muted">Изменяйте баланс в пару кликов. Все изменения пишутся напрямую в users.json.</p>
+          <p class="muted">Коэффициент</p>
+          <h2><span id="coefficient">1.00</span>x</h2>
         </div>
-        <div class="admin-actions">
-          <button id="refreshBtn" class="btn-secondary" style="width:auto">Обновить список</button>
-          <button id="adminLogoutBtn" class="btn-outline" style="width:auto">Выйти</button>
+
+        <p id="message" class="message"></p>
+
+        <div class="chart-wrapper">
+          <div class="link-row" style="justify-content: space-between;">
+            <p class="muted" style="margin:0">График коэффициента</p>
+            <span class="pill">Прогноз до краша</span>
+          </div>
+          <canvas id="coefChart" height="180"></canvas>
         </div>
-      </div>
 
-      <div class="notice">
-        Внимание: изменения баланса вступают в силу мгновенно. Вводите только целые неотрицательные значения.
-      </div>
+        <div>
+          <p class="muted">Участники раунда</p>
+          <div id="playersContainer" class="players-list"></div>
+        </div>
+      </article>
 
-      <div class="table-wrapper" style="overflow-x:auto">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Пользователь</th>
-              <th>Текущий баланс</th>
-              <th>Новый баланс</th>
-              <th>Действие</th>
-            </tr>
-          </thead>
-          <tbody id="usersTable"></tbody>
-        </table>
-      </div>
-      <p id="adminPanelMessage" class="message"></p>
+      <article class="glass-card history-card">
+        <p class="eyebrow">Последние результаты</p>
+        <div id="historyList" class="history-list"></div>
+      </article>
     </section>
   </div>
 
-  <script>
-    const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
-    const adminLoginSection = document.getElementById('adminLoginSection');
-    const adminPanelSection = document.getElementById('adminPanelSection');
-    const adminLoginForm = document.getElementById('adminLoginForm');
-    const adminLoginMessage = document.getElementById('adminLoginMessage');
-    const adminPanelMessage = document.getElementById('adminPanelMessage');
-    const usersTable = document.getElementById('usersTable');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const logoutBtn = document.getElementById('adminLogoutBtn');
+<script>
+  const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
 
-    async function fetchUsers() {
-      const resp = await fetch(`${BASE_URL}/admin/users`, { credentials: 'include' });
-      if (!resp.ok) {
-        throw new Error('Нет доступа');
+  const BASE_SPEED = 0.05; // согласован с сервером
+  const ACCEL = 0.08;
+  const MAX_CHART_POINTS = 240;
+  const LOG_SCALE_THRESHOLD = 6; // переход на лог-шкалу, если коэффициент огромный
+
+  let user = null;
+  let animationFrameId = null;
+  let stateIntervalId = null;
+  let serverOffset = 0;
+  let coefHistory = [];
+  let currentPhase = 'idle';
+
+  const balanceEl = document.getElementById('balance');
+  const coefficientEl = document.getElementById('coefficient');
+  const messageEl = document.getElementById('message');
+  const actionBtn = document.getElementById('actionBtn');
+  const betInputEl = document.getElementById('bet');
+  const playersContainer = document.getElementById('playersContainer');
+  const historyList = document.getElementById('historyList');
+  const chartCanvas = document.getElementById('coefChart');
+  const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
+
+  let bettingEndTime = null;
+  let crashTime = null;
+  let crashEnded = true;
+  let hasBet = false;
+  let hasCashedOut = false;
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    resizeChart();
+    window.addEventListener('resize', resizeChart);
+    try {
+      const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Не авторизован');
+      user = await resp.json();
+      balanceEl.textContent = user.balance;
+
+      // инициализация UI
+      actionBtn.disabled = false;
+      actionBtn.textContent = 'Поставить';
+      actionBtn.classList.add('start');
+
+      await fetchCrashState();
+      await loadHistory();
+      stateIntervalId = setInterval(fetchCrashState, 500);
+    } catch (err) {
+      alert('Пожалуйста, сначала войдите.');
+      window.location.href = 'index.html';
+    }
+  });
+
+  function showMessage(msg, color = '#333') {
+    messageEl.textContent = msg;
+    messageEl.style.color = color;
+  }
+
+  function renderPlayers(players) {
+    playersContainer.innerHTML = '';
+    (players || []).forEach((p) => {
+      const div = document.createElement('div');
+      div.className = 'player-row';
+      const colorDot = document.createElement('span');
+      colorDot.className = 'player-color';
+      colorDot.style.background = p.color || '#888';
+      const text = document.createElement('span');
+      text.textContent = `${p.username} — ${p.bet} 🍬`;
+      if (p.cashedOut) {
+        text.textContent += ` → забрал(а) x${(p.cashoutCoef||0).toFixed(2)} (выигрыш ${p.winnings} 🍬)`;
       }
-      return resp.json();
-    }
+      div.append(colorDot, text);
+      playersContainer.append(div);
+    });
+  }
 
-    function renderUsers(users) {
-      usersTable.innerHTML = '';
-      users.forEach(({ username, balance }) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${username}</td>
-          <td>${balance} 🍬</td>
-          <td><input type="number" min="0" class="input-field" value="${balance}" data-username="${username}" /></td>
-          <td><button class="btn-primary" data-username="${username}">Сохранить</button></td>
-        `;
-        usersTable.appendChild(tr);
-      });
-    }
+  // Получаем текущее состояние
+  async function fetchCrashState() {
+    try {
+      const resp = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Ошибка при получении состояния');
 
-    function togglePanels(isAdmin) {
-      adminLoginSection.style.display = isAdmin ? 'none' : '';
-      adminPanelSection.style.display = isAdmin ? '' : 'none';
-    }
-
-    async function init() {
-      try {
-        const users = await fetchUsers();
-        renderUsers(users);
-        togglePanels(true);
-      } catch (err) {
-        console.warn('Admin auth check failed:', err.message);
-        togglePanels(false);
-      }
-    }
-
-    adminLoginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      adminLoginMessage.textContent = '';
-      const login = document.getElementById('adminLogin').value.trim();
-      const password = document.getElementById('adminPassword').value.trim();
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ login, password })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Ошибка входа');
+      // синхронизируем время от сервера
+      const now = data.serverTime || Date.now();
+      serverOffset = now - Date.now();
+      const players = data.players || [];
+      renderPlayers(players);
+      bettingEndTime = data.bettingEndTime;
+      crashTime = data.crashTime;
+      crashEnded = data.ended;
+      if (user) {
+        const me = players.find((p) => p.username === user.username);
+        if (me) {
+          hasBet = true;
+          hasCashedOut = !!me.cashedOut;
+        } else {
+          hasBet = false;
+          hasCashedOut = false;
         }
-        adminLoginMessage.textContent = data.message;
-        adminLoginMessage.className = 'message success';
-        const users = await fetchUsers();
-        renderUsers(users);
-        togglePanels(true);
-      } catch (err) {
-        adminLoginMessage.textContent = err.message;
-        adminLoginMessage.className = 'message error';
       }
-    });
+      const nextPhase = data.ended
+        ? 'idle'
+        : now < bettingEndTime
+          ? 'betting'
+          : 'running';
+      handlePhaseTransition(nextPhase, data);
 
-    refreshBtn.addEventListener('click', async () => {
-      adminPanelMessage.textContent = '';
-      try {
-        const users = await fetchUsers();
-        renderUsers(users);
-        adminPanelMessage.textContent = 'Список обновлён.';
-        adminPanelMessage.className = 'message success';
-      } catch (err) {
-        adminPanelMessage.textContent = err.message;
-        adminPanelMessage.className = 'message error';
-      }
-    });
-
-    usersTable.addEventListener('click', async (e) => {
-      if (e.target.tagName !== 'BUTTON') return;
-      const username = e.target.getAttribute('data-username');
-      const input = usersTable.querySelector(`input[data-username="${username}"]`);
-      const balanceValue = Number(input.value);
-      if (!Number.isFinite(balanceValue) || balanceValue < 0) {
-        adminPanelMessage.textContent = 'Введите корректный баланс.';
-        adminPanelMessage.className = 'message error';
+      // Если раунд не идёт (ended = true) — показываем результат (если есть) и открываем ставки
+      if (data.ended) {
+        stopCoefficientAnimation();
+        if (data.crashPoint != null) {
+          coefficientEl.textContent = data.crashPoint.toFixed(2);
+          showMessage('💥 Краш! Ждём нового раунда', 'red');
+        } else {
+          coefficientEl.textContent = '1.00';
+          showMessage('Ждём нового раунда', '#333');
+        }
+        betInputEl.disabled = false;
+        hasBet = false;
+        hasCashedOut = false;
+        actionBtn.disabled = false;
+        actionBtn.textContent = 'Поставить';
+        actionBtn.classList.remove('cashout');
+        actionBtn.classList.add('start');
+        if (chartCtx && coefHistory.length === 0) {
+          resetChart(1);
+        }
+        await loadHistory();
         return;
       }
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(username)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ balance: balanceValue })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Не удалось сохранить');
-        }
-        adminPanelMessage.textContent = `Баланс ${data.username} обновлён: ${data.balance} 🍬`;
-        adminPanelMessage.className = 'message success';
-        input.value = data.balance;
-        input.parentElement.previousElementSibling.textContent = `${data.balance} 🍬`;
-      } catch (err) {
-        adminPanelMessage.textContent = err.message;
-        adminPanelMessage.className = 'message error';
+
+      // Фаза ставок (текущее время < bettingEndTime) — ставки ОТКРЫТЫ
+      if (now < bettingEndTime) {
+        stopCoefficientAnimation();
+        coefficientEl.textContent = '1.00';
+        const secsLeft = Math.ceil((bettingEndTime - now) / 1000);
+        showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
+        betInputEl.disabled = false;
+        actionBtn.disabled = false;
+        actionBtn.textContent = hasBet ? 'Добавить ставку' : 'Поставить';
+        actionBtn.classList.remove('cashout');
+        actionBtn.classList.add('start');
+        return;
       }
+
+      // Фаза роста (bettingEndTime ≤ now < crashTime)
+      if (now >= bettingEndTime && now < crashTime) {
+        betInputEl.disabled = true;
+        // если пользователь поставил — показываем кнопку "Забрать"
+        if (hasBet && !hasCashedOut) {
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Забрать';
+          actionBtn.classList.remove('start');
+          actionBtn.classList.add('cashout');
+        } else {
+          actionBtn.disabled = true; // нельзя забрать если не ставил
+          actionBtn.textContent = hasBet ? 'Забрать' : 'Ставка не совершена';
+          actionBtn.classList.remove('start');
+          actionBtn.classList.add('cashout');
+        }
+        showMessage('Раунд идёт... 🚀', '#333');
+        // запустить отрисовку коэффициента
+        startCoefficientAnimation();
+        return;
+      }
+
+      // Если now >= crashTime — сразу обработаем краш (иногда сервер ещё обновляет)
+      if (now >= crashTime) {
+        stopCoefficientAnimation();
+        if (data.crashPoint != null) {
+          coefficientEl.textContent = data.crashPoint.toFixed(2);
+          showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
+        } else {
+          coefficientEl.textContent = '1.00';
+          showMessage('Ждём нового раунда', '#333');
+        }
+        betInputEl.disabled = false;
+        hasBet = false;
+        hasCashedOut = false;
+        actionBtn.disabled = false;
+        actionBtn.textContent = 'Поставить';
+        actionBtn.classList.remove('cashout');
+        actionBtn.classList.add('start');
+        await updateBalanceInUI();
+        await loadHistory();
+      }
+    } catch (err) {
+      console.error(err);
+      showMessage(err.message || 'Ошибка', 'red');
+    }
+  }
+
+  function handlePhaseTransition(nextPhase, state) {
+    if (currentPhase === nextPhase) return;
+    currentPhase = nextPhase;
+    if (nextPhase === 'betting') {
+      resetChart(1);
+      stopCoefficientAnimation();
+    } else if (nextPhase === 'running') {
+      if (!coefHistory.length && bettingEndTime) {
+        pushCoefHistory(bettingEndTime, 1);
+      }
+      startCoefficientAnimation();
+    } else if (nextPhase === 'idle') {
+      stopCoefficientAnimation();
+      if (state.crashPoint != null) {
+        pushCoefHistory(state.crashTime || (Date.now() + serverOffset), state.crashPoint);
+        drawChart();
+      }
+    }
+  }
+
+  function startCoefficientAnimation() {
+    if (animationFrameId || !bettingEndTime || !crashTime) return;
+    animationFrameId = requestAnimationFrame(animationTick);
+  }
+
+  function stopCoefficientAnimation() {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+  }
+
+  function animationTick() {
+    if (!bettingEndTime || !crashTime) {
+      animationFrameId = null;
+      return;
+    }
+    const serverNow = Date.now() + serverOffset;
+    if (serverNow >= crashTime || crashEnded) {
+      animationFrameId = null;
+      return;
+    }
+    const elapsedSec = Math.max(0, (serverNow - bettingEndTime) / 1000);
+    const coef = 1 + BASE_SPEED * elapsedSec + 0.5 * ACCEL * elapsedSec * elapsedSec;
+    coefficientEl.textContent = coef.toFixed(2);
+    if (chartCtx) {
+      pushCoefHistory(serverNow, coef);
+      drawChart();
+    }
+    animationFrameId = requestAnimationFrame(animationTick);
+  }
+
+  function pushCoefHistory(time, value) {
+    if (!chartCtx) return;
+    coefHistory.push({ time, value });
+    if (coefHistory.length > MAX_CHART_POINTS) {
+      coefHistory.shift();
+    }
+  }
+
+  function resetChart(initialValue = 1) {
+    if (!chartCtx) return;
+    coefHistory = [];
+    const baseTime = bettingEndTime || (Date.now() + serverOffset);
+    pushCoefHistory(baseTime, initialValue);
+    drawChart();
+  }
+
+  function drawChart() {
+    if (!chartCtx || !coefHistory.length) return;
+    chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+
+    const startTime = coefHistory[0].time;
+    const latestTime = coefHistory[coefHistory.length - 1].time;
+    const duration = Math.max(1000, latestTime - startTime);
+    const projectionSpan = crashTime
+      ? Math.max(duration, crashTime - startTime)
+      : duration;
+
+    const values = coefHistory.map((p) => p.value);
+    let minVal = Math.min(1, ...values);
+    let maxVal = Math.max(...values);
+    if (maxVal - minVal < 0.25) {
+      maxVal = minVal + 0.25;
+    } else {
+      maxVal *= 1.05;
+    }
+    const useLogScale = maxVal / Math.max(minVal, 1) >= LOG_SCALE_THRESHOLD;
+    let minLog = null;
+    let maxLog = null;
+    if (useLogScale) {
+      minVal = Math.max(minVal, 1.0001);
+      minLog = Math.log(minVal);
+      maxLog = Math.log(maxVal);
+    }
+
+    const normalize = (value) => {
+      if (useLogScale) {
+        const safe = Math.max(value, 1.0001);
+        return (Math.log(safe) - minLog) / Math.max(0.0001, maxLog - minLog);
+      }
+      return (value - minVal) / Math.max(0.0001, maxVal - minVal);
+    };
+
+    // grid
+    chartCtx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+    chartCtx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = (chartCanvas.height / 4) * i;
+      chartCtx.beginPath();
+      chartCtx.moveTo(0, y);
+      chartCtx.lineTo(chartCanvas.width, y);
+      chartCtx.stroke();
+    }
+
+    const points = coefHistory.map((point) => {
+      const x = ((point.time - startTime) / duration) * chartCanvas.width;
+      const norm = normalize(point.value);
+      const y = chartCanvas.height - norm * chartCanvas.height;
+      return { x, y };
     });
 
-    logoutBtn.addEventListener('click', async () => {
-      await fetch(`${BASE_URL}/admin/logout`, {
+    // area
+    chartCtx.beginPath();
+    points.forEach((pt, idx) => {
+      if (idx === 0) chartCtx.moveTo(pt.x, pt.y);
+      else chartCtx.lineTo(pt.x, pt.y);
+    });
+    chartCtx.lineTo(points[points.length - 1].x, chartCanvas.height);
+    chartCtx.lineTo(points[0].x, chartCanvas.height);
+    chartCtx.closePath();
+    chartCtx.fillStyle = 'rgba(127, 90, 240, 0.12)';
+    chartCtx.fill();
+
+    // line
+    chartCtx.beginPath();
+    points.forEach((pt, idx) => {
+      if (idx === 0) chartCtx.moveTo(pt.x, pt.y);
+      else chartCtx.lineTo(pt.x, pt.y);
+    });
+    chartCtx.strokeStyle = '#7f5af0';
+    chartCtx.lineWidth = 2;
+    chartCtx.stroke();
+
+    // projection
+    if (currentPhase === 'running' && crashTime && bettingEndTime) {
+      const projectionPoints = [];
+      const steps = 30;
+      const startProjection = Math.max(points[points.length - 1].x, 0);
+      for (let i = 0; i <= steps; i++) {
+        const t = bettingEndTime + ((crashTime - bettingEndTime) * (i / steps));
+        const rawX = ((t - startTime) / projectionSpan) * chartCanvas.width;
+        const x = Math.min(chartCanvas.width, rawX);
+        if (x < startProjection) continue;
+        const elapsed = Math.max(0, (t - bettingEndTime) / 1000);
+        const projectedValue = 1 + BASE_SPEED * elapsed + 0.5 * ACCEL * elapsed * elapsed;
+        const norm = normalize(projectedValue);
+        const y = chartCanvas.height - norm * chartCanvas.height;
+        projectionPoints.push({ x, y });
+      }
+      if (projectionPoints.length > 1) {
+        chartCtx.save();
+        chartCtx.setLineDash([6, 6]);
+        chartCtx.beginPath();
+        projectionPoints.forEach((pt, idx) => {
+          if (idx === 0) chartCtx.moveTo(pt.x, pt.y);
+          else chartCtx.lineTo(pt.x, pt.y);
+        });
+        chartCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        chartCtx.lineWidth = 1.5;
+        chartCtx.stroke();
+        chartCtx.restore();
+      }
+    }
+  }
+
+  function resizeChart() {
+    if (!chartCanvas) return;
+    const width = chartCanvas.parentElement ? chartCanvas.parentElement.clientWidth : chartCanvas.clientWidth;
+    chartCanvas.width = width;
+    chartCanvas.height = 180;
+    drawChart();
+  }
+
+  async function updateBalanceInUI() {
+    try {
+      const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Не авторизован');
+      user = await resp.json();
+      balanceEl.textContent = user.balance;
+    } catch {
+      // игнорируем
+    }
+  }
+
+  actionBtn.addEventListener('click', async () => {
+    if (actionBtn.classList.contains('cashout')) {
+      await handleCashout();
+    } else {
+      await handleBet();
+    }
+  });
+
+  async function handleBet() {
+    const betValue = parseInt(betInputEl.value, 10);
+    if (!betValue || betValue <= 0) {
+      showMessage('Некорректная ставка!', 'red');
+      return;
+    }
+    if (betValue > user.balance) {
+      showMessage('Недостаточно средств!', 'red');
+      return;
+    }
+    if (bettingEndTime && Date.now() + serverOffset > bettingEndTime) {
+      showMessage('Фаза ставок закрыта', 'red');
+      return;
+    }
+
+    try {
+      actionBtn.disabled = true;
+      const resp = await fetch(`${BASE_URL}/crash/join`, {
         method: 'POST',
-        credentials: 'include'
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ bet: betValue })
       });
-      togglePanels(false);
-      adminPanelMessage.textContent = '';
-      adminLoginMessage.textContent = 'Вы вышли из панели.';
-      adminLoginMessage.className = 'message';
-    });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Ошибка при ставке');
 
-    init();
-  </script>
+      user.balance -= betValue;
+      balanceEl.textContent = user.balance;
+
+      renderPlayers(data.players || []);
+      bettingEndTime = data.bettingEndTime;
+      crashTime = data.crashTime;
+      crashEnded = data.ended;
+      hasBet = true;
+      hasCashedOut = false;
+      betInputEl.value = '';
+
+      const now = Date.now() + serverOffset;
+      if (now < bettingEndTime) {
+        actionBtn.textContent = 'Добавить ставку';
+        actionBtn.classList.remove('cashout');
+        actionBtn.classList.add('start');
+        actionBtn.disabled = false;
+        const secsLeft = Math.ceil((bettingEndTime - now) / 1000);
+        showMessage(`Фаза ставок, ещё ${secsLeft} сек`, '#333');
+      } else {
+        actionBtn.textContent = 'Забрать';
+        actionBtn.classList.remove('start');
+        actionBtn.classList.add('cashout');
+        actionBtn.disabled = false;
+        showMessage('Раунд идёт... 🚀', '#333');
+        startCoefficientAnimation();
+      }
+    } catch (err) {
+      showMessage(err.message || 'Ошибка', 'red');
+      actionBtn.disabled = false;
+    }
+  }
+
+  async function handleCashout() {
+    if (!hasBet || hasCashedOut) return;
+    hasCashedOut = true;
+    actionBtn.disabled = true;
+    const coefToTake = parseFloat(coefficientEl.textContent) || 1.0;
+    try {
+      const resp = await fetch(`${BASE_URL}/crash/cashout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ coefficient: coefToTake })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Ошибка при выплате');
+
+      showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${coefToTake.toFixed(2)})`, 'green');
+      user.balance = data.newBalance;
+      balanceEl.textContent = user.balance;
+
+      const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
+      const stData = await state.json();
+      renderPlayers(stData.players || []);
+    } catch (err) {
+      showMessage(err.message || 'Ошибка', 'red');
+      hasCashedOut = false;
+      actionBtn.disabled = false;
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const resp = await fetch(`${BASE_URL}/crash/history`, { credentials: 'include' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Ошибка при загрузке истории');
+
+      historyList.innerHTML = '';
+      data.forEach((round) => {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        const date = new Date(round.timestamp);
+        const header = document.createElement('div');
+        header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet}🍬`;
+        li.append(header);
+
+        const subUl = document.createElement('ul');
+        subUl.className = 'history-players';
+        round.players.forEach((p) => {
+          const subLi = document.createElement('li');
+          let txt = `${p.username} — ставка ${p.bet}🍬`;
+          if (p.cashedOut) {
+            txt += `, забрал(а) на x${p.cashoutCoef.toFixed(2)} → выигрыш ${p.winnings}🍬`;
+          } else {
+            txt += `, проиграл(а)`;
+          }
+          subLi.textContent = txt;
+          subUl.append(subLi);
+        });
+        li.append(subUl);
+        historyList.append(li);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+</script>
 </body>
 </html>
-
