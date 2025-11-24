@@ -3,21 +3,54 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Главная</title>
+  <title>Главная · 320xbet</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main>
-    <h1>Добро пожаловать, <span id="username"></span>!</h1>
-    <p>Ваши конфетки: <span id="balance"></span></p>
+  <div class="dashboard-shell">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Твой профиль</p>
+        <h1>Привет, <span id="username"></span> 👋</h1>
+        <p class="muted">Готов сыграть ещё раунд? Баланс обновляется автоматически.</p>
+      </div>
+      <button id="logoutBtn" class="btn-outline">Выйти</button>
+    </header>
 
-    <div class="game-modes">
-      <button onclick="window.location.href='crash.html'">🚀 Краш</button>
-      <button onclick="window.location.href='roulette.html'">🎯 Рулетка</button>
-    </div>
+    <section class="stat-grid">
+      <article class="glass-card stat-card">
+        <p class="muted">Текущий баланс</p>
+        <h2><span id="balance"></span> 🍬</h2>
+        <p class="stat-subtext">Конфетки начисляются и списываются в реальном времени</p>
+      </article>
+      <article class="glass-card stat-card">
+        <p class="muted">Мини-режимы</p>
+        <h2>2 активных</h2>
+        <p class="stat-subtext">🚀 Глобальный краш и 🎯 цифровая рулетка</p>
+      </article>
+    </section>
 
-    <button id="logoutBtn">Выйти</button>
-  </main>
+    <section class="game-grid">
+      <article class="glass-card game-card">
+        <span class="tag">🚀 Краш</span>
+        <h3>Глобальный краш</h3>
+        <p class="muted">Успей забрать конфеты до взрыва коэффициента. Общий раунд для всех игроков.</p>
+        <button class="btn-primary" onclick="window.location.href='crash.html'">Запустить «Краш»</button>
+      </article>
+
+      <article class="glass-card game-card">
+        <span class="tag">🎯 Рулетка</span>
+        <h3>Неон-колесо</h3>
+        <p class="muted">Стань одним из двух или более игроков, дели банк по ставкам и поймай сектор удачи.</p>
+        <button class="btn-secondary" onclick="window.location.href='roulette.html'">Запустить «Рулетку»</button>
+      </article>
+    </section>
+
+    <section class="glass-card">
+      <p class="eyebrow">Нужна помощь?</p>
+      <p class="muted">Администрация может вручную изменить баланс или восстановить доступ. Если ты модератор — переходи в <a href="admin.html">панель управления</a>.</p>
+    </section>
+  </div>
 
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
