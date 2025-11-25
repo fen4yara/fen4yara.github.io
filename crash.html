@@ -50,7 +50,7 @@
         </div>
       </article>
 
-      <article class="glass-card history-card">
+      <article class="glass-card history-card" style="max-height: 400px; overflow-y: auto;">
         <p class="eyebrow">Последние результаты</p>
         <div id="historyList" class="history-list"></div>
       </article>
@@ -100,6 +100,7 @@
   let hasCashedOut = false;
   let autoCashoutTarget = null;
   let lastBet = 0;
+  let lastCoefBeforeCrash = null;
   let cachedCrashHistory = [];
 
   window.addEventListener('DOMContentLoaded', async () => {
@@ -194,6 +195,8 @@
         hasBet = false;
         hasCashedOut = false;
         autoCashoutTarget = null;
+        lastCoefBeforeCrash = null;
+        coefficientEl.style.color = '';
         if (lastBet > 0) {
           betInputEl.value = lastBet;
         }
@@ -247,11 +250,22 @@
       if (now >= crashTime) {
         stopCoefficientAnimation();
         if (data.crashPoint != null) {
-          coefficientEl.textContent = data.crashPoint.toFixed(2);
+          // Показываем последний коэффициент перед крашем красным, если он был
+          if (lastCoefBeforeCrash && lastCoefBeforeCrash < data.crashPoint) {
+            coefficientEl.textContent = lastCoefBeforeCrash.toFixed(2);
+            coefficientEl.style.color = 'var(--danger)';
+            setTimeout(() => {
+              coefficientEl.textContent = data.crashPoint.toFixed(2);
+            }, 1000);
+          } else {
+            coefficientEl.textContent = data.crashPoint.toFixed(2);
+            coefficientEl.style.color = 'var(--danger)';
+          }
           showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
         } else {
           coefficientEl.textContent = '1.00';
-          showMessage('Ждём нового раунда', '#333');
+          coefficientEl.style.color = 'var(--danger)';
+          showMessage('💥 Краш! Выиграть уже нельзя.', 'red');
         }
         betInputEl.disabled = false;
         hasBet = false;
@@ -315,9 +329,20 @@
     const coef = 1 + BASE_SPEED * elapsedSec + 0.5 * ACCEL * elapsedSec * elapsedSec;
     coefficientEl.textContent = coef.toFixed(2);
     
+    // Сохраняем последний коэффициент перед крашем
+    if (serverNow < crashTime) {
+      lastCoefBeforeCrash = coef;
+    }
+    
     // Автовывод
     if (autoCashoutTarget && hasBet && !hasCashedOut && coef >= autoCashoutTarget) {
-      handleCashout();
+      const shouldContinue = serverNow < crashTime && !crashEnded;
+      handleCashout().then(() => {
+        // После автовывода продолжаем анимацию, если раунд еще идет
+        if (shouldContinue && !crashEnded) {
+          animationFrameId = requestAnimationFrame(animationTick);
+        }
+      });
       return;
     }
     
@@ -545,6 +570,7 @@
     hasCashedOut = true;
     actionBtn.disabled = true;
     const coefToTake = parseFloat(coefficientEl.textContent) || 1.0;
+    const lastCoefBeforeCashout = coefToTake;
     try {
       const resp = await fetch(`${BASE_URL}/crash/cashout`, {
         method: 'POST',
@@ -562,6 +588,17 @@
       const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
       const stData = await state.json();
       renderPlayers(stData.players || []);
+      
+      // После автовывода продолжаем игру, если раунд еще идет
+      if (!stData.ended && stData.crashTime && Date.now() + serverOffset < stData.crashTime) {
+        // Игра продолжается, просто отмечаем что мы уже забрали
+        actionBtn.textContent = 'Уже забрали';
+        actionBtn.disabled = true;
+        // Продолжаем анимацию
+        if (!animationFrameId) {
+          startCoefficientAnimation();
+        }
+      }
     } catch (err) {
       showMessage(err.message || 'Ошибка', 'red');
       hasCashedOut = false;

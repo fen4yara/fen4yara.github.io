@@ -42,6 +42,7 @@
           <button id="downloadUsersBtn" class="btn-secondary" style="width:auto">📥 users.json</button>
           <button id="downloadHistoryBtn" class="btn-secondary" style="width:auto">📥 history.json</button>
           <button id="downloadDepositsBtn" class="btn-secondary" style="width:auto">📥 deposits.json</button>
+          <button id="downloadPromocodesBtn" class="btn-secondary" style="width:auto">📥 promocodes.json</button>
           <button id="refreshBtn" class="btn-secondary" style="width:auto">Обновить список</button>
           <button id="adminLogoutBtn" class="btn-outline" style="width:auto">Выйти</button>
         </div>
@@ -67,6 +68,40 @@
       </div>
       <p id="adminPanelMessage" class="message"></p>
     </section>
+
+    <section class="glass-card" id="promocodesSection" style="display:none">
+      <div class="top-bar" style="gap:12px">
+        <div>
+          <p class="eyebrow">Управление промокодами</p>
+          <p class="muted">Создавайте промокоды с наградой и ограничением активаций.</p>
+        </div>
+        <button id="refreshPromocodesBtn" class="btn-secondary" style="width:auto">Обновить</button>
+      </div>
+
+      <div class="form-grid" style="margin-bottom: 20px;">
+        <h3>Создать промокод</h3>
+        <input type="text" id="newPromocodeCode" class="input-field" placeholder="Код промокода" />
+        <input type="number" id="newPromocodeReward" class="input-field" min="1" placeholder="Награда (🍬)" />
+        <input type="number" id="newPromocodeActivations" class="input-field" min="1" placeholder="Количество активаций" />
+        <button id="createPromocodeBtn" class="btn-primary">Создать</button>
+        <p id="promocodeCreateMessage" class="message"></p>
+      </div>
+
+      <div class="table-wrapper" style="overflow-x:auto">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Код</th>
+              <th>Награда</th>
+              <th>Активаций осталось</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="promocodesTable"></tbody>
+        </table>
+      </div>
+      <p id="promocodesMessage" class="message"></p>
+    </section>
   </div>
 
   <script>
@@ -79,6 +114,15 @@
     const usersTable = document.getElementById('usersTable');
     const refreshBtn = document.getElementById('refreshBtn');
     const logoutBtn = document.getElementById('adminLogoutBtn');
+    const promocodesSection = document.getElementById('promocodesSection');
+    const promocodesTable = document.getElementById('promocodesTable');
+    const newPromocodeCode = document.getElementById('newPromocodeCode');
+    const newPromocodeReward = document.getElementById('newPromocodeReward');
+    const newPromocodeActivations = document.getElementById('newPromocodeActivations');
+    const createPromocodeBtn = document.getElementById('createPromocodeBtn');
+    const promocodeCreateMessage = document.getElementById('promocodeCreateMessage');
+    const promocodesMessage = document.getElementById('promocodesMessage');
+    const refreshPromocodesBtn = document.getElementById('refreshPromocodesBtn');
 
     async function fetchUsers() {
       const resp = await fetch(`${BASE_URL}/admin/users`, { credentials: 'include' });
@@ -273,6 +317,144 @@
         adminPanelMessage.className = 'message error';
       }
     });
+
+    document.getElementById('downloadPromocodesBtn').addEventListener('click', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/download/promocodes.json`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось скачать');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'promocodes.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    });
+
+    // Промокоды
+    async function fetchPromocodes() {
+      const resp = await fetch(`${BASE_URL}/admin/promocodes`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Нет доступа');
+      return resp.json();
+    }
+
+    function renderPromocodes(promocodes) {
+      promocodesTable.innerHTML = '';
+      if (!promocodes.length) {
+        promocodesTable.innerHTML = '<tr><td colspan="4" class="muted">Нет промокодов</td></tr>';
+        return;
+      }
+      promocodes.forEach((p) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.code}</td>
+          <td>${p.reward} 🍬</td>
+          <td>${p.activationsLeft}</td>
+          <td><button class="btn-danger" data-code="${p.code}" data-action="delete-promocode" style="width:auto; font-size:0.85rem">Удалить</button></td>
+        `;
+        promocodesTable.appendChild(tr);
+      });
+    }
+
+    createPromocodeBtn.addEventListener('click', async () => {
+      const code = newPromocodeCode.value.trim();
+      const reward = Number(newPromocodeReward.value);
+      const activations = Number(newPromocodeActivations.value);
+      
+      if (!code) {
+        promocodeCreateMessage.textContent = 'Введите код';
+        promocodeCreateMessage.className = 'message error';
+        return;
+      }
+      if (!reward || reward < 1) {
+        promocodeCreateMessage.textContent = 'Введите корректную награду';
+        promocodeCreateMessage.className = 'message error';
+        return;
+      }
+      if (!activations || activations < 1) {
+        promocodeCreateMessage.textContent = 'Введите корректное количество активаций';
+        promocodeCreateMessage.className = 'message error';
+        return;
+      }
+
+      try {
+        createPromocodeBtn.disabled = true;
+        const resp = await fetch(`${BASE_URL}/admin/promocodes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ code, reward, activations })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Ошибка создания');
+        promocodeCreateMessage.textContent = 'Промокод создан!';
+        promocodeCreateMessage.className = 'message success';
+        newPromocodeCode.value = '';
+        newPromocodeReward.value = '';
+        newPromocodeActivations.value = '';
+        const promocodes = await fetchPromocodes();
+        renderPromocodes(promocodes);
+        setTimeout(() => {
+          promocodeCreateMessage.textContent = '';
+        }, 2000);
+      } catch (err) {
+        promocodeCreateMessage.textContent = err.message;
+        promocodeCreateMessage.className = 'message error';
+      } finally {
+        createPromocodeBtn.disabled = false;
+      }
+    });
+
+    refreshPromocodesBtn.addEventListener('click', async () => {
+      try {
+        const promocodes = await fetchPromocodes();
+        renderPromocodes(promocodes);
+        promocodesMessage.textContent = 'Список обновлён';
+        promocodesMessage.className = 'message success';
+        setTimeout(() => {
+          promocodesMessage.textContent = '';
+        }, 2000);
+      } catch (err) {
+        promocodesMessage.textContent = err.message;
+        promocodesMessage.className = 'message error';
+      }
+    });
+
+    promocodesTable.addEventListener('click', async (e) => {
+      if (e.target.tagName !== 'BUTTON') return;
+      const code = e.target.getAttribute('data-code');
+      const action = e.target.getAttribute('data-action');
+      
+      if (action === 'delete-promocode') {
+        if (!confirm(`Удалить промокод "${code}"?`)) return;
+        try {
+          const resp = await fetch(`${BASE_URL}/admin/promocodes/${encodeURIComponent(code)}`, {
+            method: 'DELETE',
+            credentials: 'include'
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Ошибка удаления');
+          promocodesMessage.textContent = 'Промокод удалён';
+          promocodesMessage.className = 'message success';
+          const promocodes = await fetchPromocodes();
+          renderPromocodes(promocodes);
+          setTimeout(() => {
+            promocodesMessage.textContent = '';
+          }, 2000);
+        } catch (err) {
+          promocodesMessage.textContent = err.message;
+          promocodesMessage.className = 'message error';
+        }
+      }
+    });
+
+    // Показываем секцию промокодов при загрузке
+    promocodesSection.style.display = '';
+    fetchPromocodes().then(renderPromocodes).catch(() => {});
 
     logoutBtn.addEventListener('click', async () => {
       await fetch(`${BASE_URL}/admin/logout`, {

@@ -1049,7 +1049,10 @@ app.post('/dice/play', (req, res) => {
 
   // Генерируем число от 0 до 999999
   const roll = Math.floor(Math.random() * 1000000);
+  // Исправляем расчет порога: при 1% threshold = 10000, при 99% threshold = 990000
   const threshold = Math.floor((percentNum / 100) * 1000000);
+  // Для "меньше": выигрыш если roll < threshold (0 до threshold-1)
+  // Для "больше": выигрыш если roll >= threshold (threshold до 999999)
   const win = side === 'less' ? roll < threshold : roll >= threshold;
   const multiplier = 100 / percentNum;
   const payout = win ? Math.floor(bet * multiplier) : 0;
@@ -1131,6 +1134,59 @@ app.post('/promocode/activate', (req, res) => {
     reward: promocode.reward,
     newBalance
   });
+});
+
+// ======= Админ: Промокоды =======
+app.get('/admin/promocodes', requireAdmin, (req, res) => {
+  const promocodes = readPromocodes();
+  res.json(promocodes);
+});
+
+app.post('/admin/promocodes', requireAdmin, (req, res) => {
+  const { code, reward, activations } = req.body;
+  if (!code || typeof code !== 'string' || !code.trim()) {
+    return res.status(400).json({ error: 'Введите код промокода' });
+  }
+  if (!Number.isFinite(reward) || reward < 1) {
+    return res.status(400).json({ error: 'Награда должна быть положительным числом' });
+  }
+  if (!Number.isInteger(activations) || activations < 1) {
+    return res.status(400).json({ error: 'Количество активаций должно быть положительным целым числом' });
+  }
+
+  const promocodes = readPromocodes();
+  const normalizedCode = code.trim().toLowerCase();
+  if (promocodes.find((p) => p.code.toLowerCase() === normalizedCode)) {
+    return res.status(400).json({ error: 'Промокод уже существует' });
+  }
+
+  const newPromocode = {
+    code: code.trim(),
+    reward: Math.floor(reward),
+    activationsLeft: Math.floor(activations)
+  };
+  promocodes.push(newPromocode);
+  writePromocodes(promocodes);
+
+  res.json(newPromocode);
+});
+
+app.delete('/admin/promocodes/:code', requireAdmin, (req, res) => {
+  const { code } = req.params;
+  const promocodes = readPromocodes();
+  const index = promocodes.findIndex((p) => p.code.toLowerCase() === code.toLowerCase());
+  if (index === -1) {
+    return res.status(404).json({ error: 'Промокод не найден' });
+  }
+  promocodes.splice(index, 1);
+  writePromocodes(promocodes);
+  res.json({ message: 'Промокод удалён' });
+});
+
+app.get('/admin/download/promocodes.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="promocodes.json"');
+  res.sendFile(promocodesFile);
 });
 
 // === По умолчанию — отдаём index.html на корень ===
