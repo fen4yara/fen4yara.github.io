@@ -1,5 +1,195 @@
 {
-  "crashHistory": [],
-  "rouletteHistory": []
+  "crashHistory": [
+    {
+      "timestamp": 1764075311168,
+      "crashPoint": 1.4,
+      "totalBet": 50000,
+      "players": [
+        {
+          "username": "yp",
+          "bet": 50000,
+          "cashedOut": false,
+          "cashoutCoef": null,
+          "winnings": 0,
+          "color": "#062477"
+        }
+      ]
+    },
+    {
+      "timestamp": 1764075287017,
+      "crashPoint": 1.99,
+      "totalBet": 58421,
+      "players": [
+        {
+          "username": "kykykyky",
+          "bet": 22662,
+          "cashedOut": false,
+          "cashoutCoef": null,
+          "winnings": 0,
+          "color": "#EE5CFF"
+        },
+        {
+          "username": "yp",
+          "bet": 35759,
+          "cashedOut": true,
+          "cashoutCoef": 1.59,
+          "winnings": 56856,
+          "color": "#0BCFED"
+        }
+      ]
+    },
+    {
+      "timestamp": 1764075265552,
+      "crashPoint": 1.43,
+      "totalBet": 120000,
+      "players": [
+        {
+          "username": "yp",
+          "bet": 50000,
+          "cashedOut": false,
+          "cashoutCoef": null,
+          "winnings": 0,
+          "color": "#AA9C67"
+        },
+        {
+          "username": "kykykyky",
+          "bet": 70000,
+          "cashedOut": false,
+          "cashoutCoef": null,
+          "winnings": 0,
+          "color": "#5FEF6F"
+        }
+      ]
+    },
+    {
+      "timestamp": 1764075241691,
+      "crashPoint": 3.19,
+      "totalBet": 2218,
+      "players": [
+        {
+          "username": "yp",
+          "bet": 500,
+          "cashedOut": true,
+          "cashoutCoef": 2.04,
+          "winnings": 1020,
+          "color": "#025320"
+        },
+        {
+          "username": "kykykyky",
+          "bet": 1718,
+          "cashedOut": true,
+          "cashoutCoef": 1.55,
+          "winnings": 2662,
+          "color": "#F0DF1A"
+        }
+      ]
+    },
+    {
+      "timestamp": 1764075219109,
+      "crashPoint": 3.75,
+      "totalBet": 51236,
+      "players": [
+        {
+          "username": "kykykyky",
+          "bet": 1236,
+          "cashedOut": true,
+          "cashoutCoef": 1.39,
+          "winnings": 1718,
+          "color": "#BD587E"
+        },
+        {
+          "username": "yp",
+          "bet": 50000,
+          "cashedOut": true,
+          "cashoutCoef": 1.54,
+          "winnings": 77000,
+          "color": "#F2DEE2"
+        }
+      ]
+    }
+  ],
+  "rouletteHistory": [
+    {
+      "winner": "yp",
+      "totalBet": 80000,
+      "timestamp": 1764075419353,
+      "players": [
+        {
+          "username": "yp",
+          "bet": 20000,
+          "color": "#52BDC1"
+        },
+        {
+          "username": "kykykyky",
+          "bet": 60000,
+          "color": "#9ED821"
+        }
+      ],
+      "winningTicket": 7566.968783580741
+    },
+    {
+      "winner": "yp",
+      "totalBet": 40605,
+      "timestamp": 1764075377951,
+      "players": [
+        {
+          "username": "kykykyky",
+          "bet": 23080,
+          "color": "#D8D671"
+        },
+        {
+          "username": "йцуй",
+          "bet": 77,
+          "color": "#0C7338"
+        },
+        {
+          "username": "yp",
+          "bet": 17448,
+          "color": "#F42657"
+        }
+      ],
+      "winningTicket": 38965.22393876163
+    },
+    {
+      "winner": "yp",
+      "totalBet": 11092,
+      "timestamp": 1764075344102,
+      "players": [
+        {
+          "username": "йцуй",
+          "bet": 492,
+          "color": "#5D7F33"
+        },
+        {
+          "username": "kykykyky",
+          "bet": 10100,
+          "color": "#FAC455"
+        },
+        {
+          "username": "yp",
+          "bet": 500,
+          "color": "#EF24CD"
+        }
+      ],
+      "winningTicket": 10991.953032996942
+    },
+    {
+      "winner": "123",
+      "totalBet": 246,
+      "timestamp": 1764074703462,
+      "players": [
+        {
+          "username": "йцуй",
+          "bet": 123,
+          "color": "#A96A29"
+        },
+        {
+          "username": "123",
+          "bet": 123,
+          "color": "#3FE4ED"
+        }
+      ],
+      "winningTicket": 209.01023839884303
+    }
+  ]
 }
-

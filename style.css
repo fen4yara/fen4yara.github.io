@@ -489,6 +489,41 @@ button.cashout {
   flex-wrap: wrap;
 }
 
+.history-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tab-btn {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn.active {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent-strong);
+}
+
+.history-content {
+  display: none;
+}
+
+.history-content.active {
+  display: block;
+}
+
 @media (max-width: 900px) {
   body {
     padding: 20px 16px 40px;

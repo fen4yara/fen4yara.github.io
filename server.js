@@ -41,6 +41,7 @@ app.use(express.static(path.join(__dirname)));
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
 const historyFile = path.join(__dirname, 'data', 'history.json');
+const depositsFile = path.join(__dirname, 'data', 'deposits.json');
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -57,6 +58,29 @@ const ensureHistoryFileExists = () => {
   }
 };
 ensureHistoryFileExists();
+
+const ensureDepositsFileExists = () => {
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+  if (!fs.existsSync(depositsFile)) {
+    fs.writeFileSync(depositsFile, '[]', 'utf-8');
+  }
+};
+ensureDepositsFileExists();
+
+function readDeposits() {
+  try {
+    const data = fs.readFileSync(depositsFile, 'utf-8');
+    return JSON.parse(data || '[]');
+  } catch (err) {
+    console.error('Ошибка чтения deposits.json:', err);
+    return [];
+  }
+}
+
+function writeDeposits(arr) {
+  fs.writeFileSync(depositsFile, JSON.stringify(arr, null, 2));
+}
 
 function readHistoryStore() {
   try {

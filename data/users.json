@@ -70,5 +70,40 @@
     "passwordHash": "0b319c91e9359f9ba6d0a91e850f3abb5a2684b9156aaea03af617c74fb47866",
     "balance": 1000,
     "ip": "178.176.83.40"
+  },
+  {
+    "username": "йцуй",
+    "passwordHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "balance": 0,
+    "ip": "85.26.165.109",
+    "banned": false
+  },
+  {
+    "username": "123",
+    "passwordHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "balance": 1123,
+    "ip": "85.26.165.109",
+    "banned": false
+  },
+  {
+    "username": "kykykyky",
+    "passwordHash": "ec429bb0ca74e6a730cd7eccd5a44404d98a3fb88f57c91087736ff6121827cc",
+    "balance": 6820,
+    "ip": "85.140.4.37",
+    "banned": false
+  },
+  {
+    "username": "yp",
+    "passwordHash": "4a1ba77dd22eae51f19cacb8547c16380f4168c9ee95167761f2b1382c8db0be",
+    "balance": 30605,
+    "ip": "31.13.144.82",
+    "banned": false
+  },
+  {
+    "username": "ggggg",
+    "passwordHash": "85e451106fb409544d0edca70f030bbe905ed7b7d1de93ca20e5390a0a7f3fd5",
+    "balance": 123123,
+    "ip": "85.140.4.37",
+    "banned": false
   }
 ]

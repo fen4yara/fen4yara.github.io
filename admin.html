@@ -41,6 +41,7 @@
         <div class="admin-actions">
           <button id="downloadUsersBtn" class="btn-secondary" style="width:auto">📥 users.json</button>
           <button id="downloadHistoryBtn" class="btn-secondary" style="width:auto">📥 history.json</button>
+          <button id="downloadDepositsBtn" class="btn-secondary" style="width:auto">📥 deposits.json</button>
           <button id="refreshBtn" class="btn-secondary" style="width:auto">Обновить список</button>
           <button id="adminLogoutBtn" class="btn-outline" style="width:auto">Выйти</button>
         </div>
@@ -248,6 +249,23 @@
         const a = document.createElement('a');
         a.href = url;
         a.download = 'history.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    });
+    
+    document.getElementById('downloadDepositsBtn').addEventListener('click', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/download/deposits.json`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось скачать');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'deposits.json';
         a.click();
         URL.revokeObjectURL(url);
       } catch (err) {

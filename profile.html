@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Профиль · 320xbet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="dashboard-shell">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Профиль</p>
+        <h1><span id="username"></span></h1>
+        <p class="muted">История игр и управление балансом</p>
+      </div>
+      <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
+    </header>
+
+    <section class="stat-grid">
+      <article class="glass-card stat-card">
+        <p class="muted">Текущий баланс</p>
+        <h2><span id="balance"></span> 🍬</h2>
+        <p class="stat-subtext">Конфетки начисляются и списываются в реальном времени</p>
+      </article>
+      <article class="glass-card stat-card">
+        <p class="muted">Пополнение</p>
+        <button id="depositBtn" class="btn-primary" style="width:100%; margin-top:12px">+ Пополнить баланс</button>
+        <p id="depositStatus" class="stat-subtext" style="margin-top:8px"></p>
+      </article>
+    </section>
+
+    <section class="glass-card">
+      <p class="eyebrow">История игр</p>
+      <div class="history-tabs">
+        <button class="tab-btn active" data-tab="crash">🚀 Краш</button>
+        <button class="tab-btn" data-tab="roulette">🎯 Рулетка</button>
+      </div>
+      <div id="crashHistory" class="history-content active">
+        <div class="history-list" id="crashHistoryList"></div>
+      </div>
+      <div id="rouletteHistory" class="history-content">
+        <div class="history-list" id="rouletteHistoryList"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="depositModal" class="modal-overlay hidden">
+    <div class="modal-content glass-card">
+      <button id="depositModalClose" class="modal-close" aria-label="Закрыть">✕</button>
+      <div id="depositModalBody">
+        <h2>Пополнение баланса</h2>
+        <p class="muted">Максимум 1000 🍬 раз в час</p>
+        <input type="number" id="depositAmount" class="input-field" min="1" max="1000" placeholder="Сумма (1-1000)" />
+        <button id="confirmDepositBtn" class="btn-primary" style="width:100%; margin-top:12px">Пополнить</button>
+        <p id="depositMessage" class="message" style="margin-top:12px"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
+    let user = null;
+
+    const usernameEl = document.getElementById('username');
+    const balanceEl = document.getElementById('balance');
+    const depositBtn = document.getElementById('depositBtn');
+    const depositStatus = document.getElementById('depositStatus');
+    const depositModal = document.getElementById('depositModal');
+    const depositModalClose = document.getElementById('depositModalClose');
+    const depositAmount = document.getElementById('depositAmount');
+    const confirmDepositBtn = document.getElementById('confirmDepositBtn');
+    const depositMessage = document.getElementById('depositMessage');
+    const crashHistoryList = document.getElementById('crashHistoryList');
+    const rouletteHistoryList = document.getElementById('rouletteHistoryList');
+
+    async function checkAuth() {
+      try {
+        const response = await fetch(`${BASE_URL}/check-auth`, {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Требуется авторизация');
+        }
+
+        user = await response.json();
+        usernameEl.textContent = user.username;
+        balanceEl.textContent = user.balance;
+        await loadDepositStatus();
+        await loadHistory();
+      } catch (err) {
+        console.error('Auth error:', err);
+        alert('Ошибка авторизации: ' + err.message);
+        window.location.href = 'index.html';
+      }
+    }
+
+    async function loadDepositStatus() {
+      try {
+        const resp = await fetch(`${BASE_URL}/profile/deposit-status`, {
+          credentials: 'include'
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.nextDepositAt) {
+          const nextTime = new Date(data.nextDepositAt);
+          const now = new Date();
+          if (nextTime > now) {
+            const minsLeft = Math.ceil((nextTime - now) / 60000);
+            depositStatus.textContent = `Следующее пополнение через ${minsLeft} мин`;
+            depositStatus.style.color = 'var(--text-muted)';
+          } else {
+            depositStatus.textContent = 'Доступно пополнение';
+            depositStatus.style.color = 'var(--success)';
+          }
+        } else {
+          depositStatus.textContent = 'Доступно пополнение';
+          depositStatus.style.color = 'var(--success)';
+        }
+      } catch (err) {
+        console.error('Deposit status error:', err);
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const resp = await fetch(`${BASE_URL}/profile/history`, {
+          credentials: 'include'
+        });
+        if (!resp.ok) throw new Error('Не удалось загрузить историю');
+        const data = await resp.json();
+
+        // Краш история
+        crashHistoryList.innerHTML = '';
+        if (!data.crash || !data.crash.length) {
+          crashHistoryList.innerHTML = '<div class="history-item muted">Нет истории игры в Краш</div>';
+        } else {
+          data.crash.forEach((round) => {
+            const li = document.createElement('li');
+            li.className = 'history-item clickable';
+            const date = new Date(round.timestamp);
+            const header = document.createElement('div');
+            header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet}🍬`;
+            li.append(header);
+
+            const player = round.players.find((p) => p.username === user.username);
+            if (player) {
+              const subUl = document.createElement('ul');
+              subUl.className = 'history-players';
+              const subLi = document.createElement('li');
+              let txt = `Ставка: ${player.bet}🍬`;
+              if (player.cashedOut) {
+                txt += `, забрал(а) на x${player.cashoutCoef.toFixed(2)} → выигрыш ${player.winnings}🍬`;
+              } else {
+                txt += `, проиграл(а)`;
+              }
+              subLi.textContent = txt;
+              subUl.append(subLi);
+              li.append(subUl);
+            }
+
+            li.addEventListener('click', () => openCrashHistoryModal(round));
+            crashHistoryList.append(li);
+          });
+        }
+
+        // Рулетка история
+        rouletteHistoryList.innerHTML = '';
+        if (!data.roulette || !data.roulette.length) {
+          rouletteHistoryList.innerHTML = '<div class="history-item muted">Нет истории игры в Рулетку</div>';
+        } else {
+          data.roulette.forEach((round) => {
+            const card = document.createElement('div');
+            card.className = 'history-item clickable';
+            const date = new Date(round.timestamp);
+            const header = document.createElement('div');
+            header.innerHTML = `<strong>${date.toLocaleTimeString('ru-RU')}</strong> — ${round.winner}`;
+            const body = document.createElement('div');
+            body.className = 'muted';
+            const ticketInfo = typeof round.winningTicket === 'number'
+              ? `, билет ${round.winningTicket.toFixed(2)}`
+              : '';
+            body.textContent = `Банк: ${round.totalBet} 🍬${ticketInfo}`;
+            
+            const player = round.players.find((p) => p.username === user.username);
+            if (player) {
+              const playerInfo = document.createElement('div');
+              playerInfo.className = 'muted';
+              playerInfo.style.marginTop = '4px';
+              playerInfo.textContent = `Твоя ставка: ${player.bet}🍬 ${round.winner === user.username ? '→ Победа!' : '→ Проигрыш'}`;
+              body.appendChild(playerInfo);
+            }
+
+            card.appendChild(header);
+            card.appendChild(body);
+            card.addEventListener('click', () => openRouletteHistoryModal(round));
+            rouletteHistoryList.appendChild(card);
+          });
+        }
+      } catch (err) {
+        console.error('History load error:', err);
+      }
+    }
+
+    function openCrashHistoryModal(round) {
+      // Можно использовать ту же модалку что и в crash.html, но проще показать alert
+      const date = new Date(round.timestamp).toLocaleString('ru-RU');
+      const player = round.players.find((p) => p.username === user.username);
+      let info = `Краш x${round.crashPoint.toFixed(2)}\nПул: ${round.totalBet}🍬\n\n`;
+      if (player) {
+        info += `Твоя ставка: ${player.bet}🍬\n`;
+        if (player.cashedOut) {
+          info += `Забрал(а) на x${player.cashoutCoef.toFixed(2)}\nВыигрыш: ${player.winnings}🍬`;
+        } else {
+          info += 'Проиграл(а)';
+        }
+      }
+      alert(info);
+    }
+
+    function openRouletteHistoryModal(round) {
+      const date = new Date(round.timestamp).toLocaleString('ru-RU');
+      const ticketInfo = typeof round.winningTicket === 'number'
+        ? round.winningTicket.toFixed(2)
+        : '—';
+      const player = round.players.find((p) => p.username === user.username);
+      let info = `Победитель: ${round.winner}\nБанк: ${round.totalBet}🍬\nБилет: ${ticketInfo}\n\n`;
+      if (player) {
+        info += `Твоя ставка: ${player.bet}🍬\n`;
+        info += round.winner === user.username ? 'Победа!' : 'Проигрыш';
+      }
+      alert(info);
+    }
+
+    // Табы
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.history-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.getAttribute('data-tab');
+        document.getElementById(`${tab}History`).classList.add('active');
+      });
+    });
+
+    // Пополнение
+    depositBtn.addEventListener('click', () => {
+      depositModal.classList.remove('hidden');
+      depositAmount.value = '';
+      depositMessage.textContent = '';
+    });
+
+    depositModalClose.addEventListener('click', () => {
+      depositModal.classList.add('hidden');
+    });
+
+    depositModal.addEventListener('click', (e) => {
+      if (e.target === depositModal) {
+        depositModal.classList.add('hidden');
+      }
+    });
+
+    confirmDepositBtn.addEventListener('click', async () => {
+      const amount = parseInt(depositAmount.value, 10);
+      if (!amount || amount < 1 || amount > 1000) {
+        depositMessage.textContent = 'Введите сумму от 1 до 1000';
+        depositMessage.className = 'message error';
+        return;
+      }
+
+      try {
+        confirmDepositBtn.disabled = true;
+        depositMessage.textContent = '';
+        const resp = await fetch(`${BASE_URL}/profile/deposit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ amount })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка пополнения');
+        }
+        depositMessage.textContent = `Баланс пополнен на ${amount}🍬!`;
+        depositMessage.className = 'message success';
+        user.balance = data.newBalance;
+        balanceEl.textContent = user.balance;
+        await loadDepositStatus();
+        setTimeout(() => {
+          depositModal.classList.add('hidden');
+        }, 1500);
+      } catch (err) {
+        depositMessage.textContent = err.message;
+        depositMessage.className = 'message error';
+      } finally {
+        confirmDepositBtn.disabled = false;
+      }
+    });
+
+    checkAuth();
+    setInterval(loadDepositStatus, 60000); // Обновляем статус каждую минуту
+  </script>
+</body>
+</html>
+
