@@ -11,13 +11,15 @@ const ADMIN_LOGIN = '123456';
 const ADMIN_PASSWORD = '123456';
 const MAX_CRASH_HISTORY = 5;
 const MAX_ROULETTE_HISTORY = 10;
+const MAX_COINFLIP_HISTORY = 20;
+const MAX_DICE_HISTORY = 20;
 const MAX_DEPOSITS_FILE_RECORDS = 1000;
 const MAX_DEPOSIT_HISTORY = 20;
 const DEPOSIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 час между пополнениями
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: 'https://fen4yaragithubio-production-9286.up.railway.app',
+  origin: 'https://fen4yaragithubio-production.up.railway.app',
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -56,7 +58,12 @@ const ensureHistoryFileExists = () => {
   const dir = path.join(__dirname, 'data');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
   if (!fs.existsSync(historyFile)) {
-    const initial = { crashHistory: [], rouletteHistory: [] };
+    const initial = {
+      crashHistory: [],
+      rouletteHistory: [],
+      coinflipHistory: [],
+      diceHistory: []
+    };
     fs.writeFileSync(historyFile, JSON.stringify(initial, null, 2));
   }
 };
@@ -395,10 +402,14 @@ app.get('/profile/history', (req, res) => {
   const userRoulette = rouletteHistory.filter(
     (round) => Array.isArray(round.players) && round.players.some((p) => p.username === username)
   );
+  const userCoinflip = coinflipHistory.filter((entry) => entry.username === username);
+  const userDice = diceHistory.filter((entry) => entry.username === username);
   const { userDeposits } = getUserDepositsMeta(username);
   res.json({
     crash: userCrash,
     roulette: userRoulette,
+    coinflip: userCoinflip,
+    dice: userDice,
     deposits: userDeposits
   });
 });
@@ -410,15 +421,26 @@ let lastSpinResult = null; // { winner, totalBet, timestamp, players: lastSpinPl
 let rouletteHistory = [];
 let crashHistory = [];
 let lastCrashResult = null;
+let coinflipHistory = [];
+let diceHistory = [];
 
 (() => {
   const store = readHistoryStore();
   let needsPersist = false;
   const rawRoulette = Array.isArray(store.rouletteHistory) ? store.rouletteHistory : [];
   const rawCrash = Array.isArray(store.crashHistory) ? store.crashHistory : [];
+  const rawCoinflip = Array.isArray(store.coinflipHistory) ? store.coinflipHistory : [];
+  const rawDice = Array.isArray(store.diceHistory) ? store.diceHistory : [];
   rouletteHistory = rawRoulette.slice(0, MAX_ROULETTE_HISTORY);
   crashHistory = rawCrash.slice(0, MAX_CRASH_HISTORY);
-  needsPersist = needsPersist || rawRoulette.length !== rouletteHistory.length || rawCrash.length !== crashHistory.length;
+  coinflipHistory = rawCoinflip.slice(0, MAX_COINFLIP_HISTORY);
+  diceHistory = rawDice.slice(0, MAX_DICE_HISTORY);
+  needsPersist =
+    needsPersist ||
+    rawRoulette.length !== rouletteHistory.length ||
+    rawCrash.length !== crashHistory.length ||
+    rawCoinflip.length !== coinflipHistory.length ||
+    rawDice.length !== diceHistory.length;
   if (rouletteHistory.length) {
     lastSpinResult = rouletteHistory[0];
   }
@@ -426,14 +448,16 @@ let lastCrashResult = null;
     lastCrashResult = crashHistory[0];
   }
   if (needsPersist) {
-    writeHistoryStore({ crashHistory, rouletteHistory });
+    writeHistoryStore({ crashHistory, rouletteHistory, coinflipHistory, diceHistory });
   }
 })();
 
 function persistHistory() {
   writeHistoryStore({
     crashHistory,
-    rouletteHistory
+    rouletteHistory,
+    coinflipHistory,
+    diceHistory
   });
 }
 
@@ -877,6 +901,137 @@ app.get('/crash/history', (req, res) => {
     return res.status(401).json({ error: 'Не авторизован' });
   }
   res.json(crashHistory);
+});
+
+// ======= Монетка =======
+app.get('/coinflip/history', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  res.json(coinflipHistory);
+});
+
+app.post('/coinflip/play', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const { bet, choice } = req.body;
+  const normalizedChoice = typeof choice === 'string' ? choice.toLowerCase() : '';
+
+  if (!bet || typeof bet !== 'number' || bet <= 0) {
+    return res.status(400).json({ error: 'Некорректная ставка' });
+  }
+  if (!['heads', 'tails'].includes(normalizedChoice)) {
+    return res.status(400).json({ error: 'Выберите сторону монеты' });
+  }
+
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.balance < bet) {
+    return res.status(400).json({ error: 'Недостаточно средств' });
+  }
+
+  const balanceAfterBet = user.balance - bet;
+  updateUserBalance(username, balanceAfterBet);
+
+  const result = Math.random() < 0.5 ? 'heads' : 'tails';
+  const win = result === normalizedChoice;
+  const payout = win ? bet * 2 : 0;
+  let finalBalance = balanceAfterBet;
+  if (win) {
+    finalBalance += payout;
+    updateUserBalance(username, finalBalance);
+  }
+
+  const entry = {
+    username,
+    bet,
+    choice: normalizedChoice,
+    result,
+    win,
+    payout,
+    timestamp: Date.now()
+  };
+
+  coinflipHistory.unshift(entry);
+  if (coinflipHistory.length > MAX_COINFLIP_HISTORY) coinflipHistory.pop();
+  persistHistory();
+
+  res.json({
+    result,
+    win,
+    payout,
+    newBalance: finalBalance,
+    history: coinflipHistory
+  });
+});
+
+// ======= Дайс =======
+app.get('/dice/history', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  res.json(diceHistory);
+});
+
+app.post('/dice/play', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const { bet, guess } = req.body;
+  if (!bet || typeof bet !== 'number' || bet <= 0) {
+    return res.status(400).json({ error: 'Некорректная ставка' });
+  }
+  const guessNumber = Number(guess);
+  if (!Number.isInteger(guessNumber) || guessNumber < 1 || guessNumber > 6) {
+    return res.status(400).json({ error: 'Число должно быть от 1 до 6' });
+  }
+
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.balance < bet) {
+    return res.status(400).json({ error: 'Недостаточно средств' });
+  }
+
+  const balanceAfterBet = user.balance - bet;
+  updateUserBalance(username, balanceAfterBet);
+
+  const roll = Math.floor(Math.random() * 6) + 1;
+  const win = roll === guessNumber;
+  const payout = win ? bet * 6 : 0;
+  let finalBalance = balanceAfterBet;
+  if (win) {
+    finalBalance += payout;
+    updateUserBalance(username, finalBalance);
+  }
+
+  const entry = {
+    username,
+    bet,
+    guess: guessNumber,
+    roll,
+    win,
+    payout,
+    timestamp: Date.now()
+  };
+
+  diceHistory.unshift(entry);
+  if (diceHistory.length > MAX_DICE_HISTORY) diceHistory.pop();
+  persistHistory();
+
+  res.json({
+    roll,
+    win,
+    payout,
+    newBalance: finalBalance,
+    history: diceHistory
+  });
 });
 
 // === По умолчанию — отдаём index.html на корень ===

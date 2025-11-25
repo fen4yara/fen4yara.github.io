@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Дайс · 320xbet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-page">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Режим</p>
+        <h1>🎲 Neon Dice</h1>
+        <p class="muted">Выбери число от 1 до 6, брось кубик и получи до ×6 от ставки.</p>
+      </div>
+      <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
+    </header>
+
+    <section class="glass-card">
+      <div class="balance-pill">
+        Баланс: <span id="diceBalance">...</span> 🍬
+      </div>
+
+      <div>
+        <p class="muted">Твоё число</p>
+        <div class="dice-grid" id="diceGrid">
+          <button class="btn-secondary dice-btn active" data-number="1">1</button>
+          <button class="btn-secondary dice-btn" data-number="2">2</button>
+          <button class="btn-secondary dice-btn" data-number="3">3</button>
+          <button class="btn-secondary dice-btn" data-number="4">4</button>
+          <button class="btn-secondary dice-btn" data-number="5">5</button>
+          <button class="btn-secondary dice-btn" data-number="6">6</button>
+        </div>
+      </div>
+
+      <label for="diceBet" class="muted">Ставка</label>
+      <input type="number" id="diceBet" min="1" class="input-field" placeholder="Введите сумму" />
+
+      <button id="diceRollBtn" class="btn-primary">Бросить кубик</button>
+      <p id="diceStatus" class="message"></p>
+    </section>
+
+    <section class="glass-card history-card">
+      <p class="eyebrow">Последние броски</p>
+      <div id="diceHistoryList" class="history-list"></div>
+    </section>
+  </div>
+
+  <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+    let user = null;
+    let selectedNumber = 1;
+
+    const balanceEl = document.getElementById('diceBalance');
+    const betInput = document.getElementById('diceBet');
+    const statusEl = document.getElementById('diceStatus');
+    const historyList = document.getElementById('diceHistoryList');
+    const rollBtn = document.getElementById('diceRollBtn');
+    const diceButtons = document.querySelectorAll('.dice-btn');
+
+    diceButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedNumber = Number(btn.dataset.number);
+        diceButtons.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    async function init() {
+      try {
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не авторизован');
+        user = await resp.json();
+        balanceEl.textContent = user.balance;
+        await loadHistory();
+      } catch (err) {
+        alert('Сначала войдите в аккаунт');
+        window.location.href = 'index.html';
+      }
+    }
+
+    async function rollDice() {
+      const bet = Number(betInput.value);
+      if (!bet || bet <= 0) {
+        statusEl.textContent = 'Введите корректную ставку';
+        statusEl.className = 'message error';
+        return;
+      }
+
+      try {
+        rollBtn.disabled = true;
+        statusEl.textContent = '';
+        const resp = await fetch(`${BASE_URL}/dice/play`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ bet, guess: selectedNumber })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
+        balanceEl.textContent = data.newBalance;
+        statusEl.textContent = data.win
+          ? `🎉 Выпало ${data.roll}. Победа! Выигрыш: ${data.payout}🍬`
+          : `🙅 Выпало ${data.roll}. Попробуй ещё`;
+        statusEl.className = `message ${data.win ? 'success' : 'error'}`;
+        betInput.value = '';
+        await loadHistory(data.history);
+      } catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.className = 'message error';
+      } finally {
+        rollBtn.disabled = false;
+      }
+    }
+
+    async function loadHistory(prefetched) {
+      try {
+        const data =
+          prefetched ||
+          (await fetch(`${BASE_URL}/dice/history`, { credentials: 'include' }).then((r) => r.json()));
+        renderHistory(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('dice history error', err);
+      }
+    }
+
+    function renderHistory(entries) {
+      historyList.innerHTML = '';
+      if (!entries.length) {
+        historyList.innerHTML = '<div class="history-item muted">История пуста</div>';
+        return;
+      }
+      entries.forEach((entry) => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        if (user && entry.username === user.username) {
+          item.classList.add('highlight');
+        }
+        const date = new Date(entry.timestamp).toLocaleString('ru-RU');
+        const outcome = entry.win ? '→ Победа' : '→ Поражение';
+        item.innerHTML = `<strong>${date}</strong> — ${entry.username} выбрал ${entry.guess}, выпало ${entry.roll} ${outcome} (${entry.bet}🍬)`;
+        historyList.appendChild(item);
+      });
+    }
+
+    rollBtn.addEventListener('click', rollDice);
+    init();
+  </script>
+</body>
+</html>
+

@@ -35,12 +35,20 @@
       <div class="history-tabs">
         <button class="tab-btn active" data-tab="crash">🚀 Краш</button>
         <button class="tab-btn" data-tab="roulette">🎯 Рулетка</button>
+        <button class="tab-btn" data-tab="coinflip">🪙 Монетка</button>
+        <button class="tab-btn" data-tab="dice">🎲 Дайс</button>
       </div>
       <div id="crashHistory" class="history-content active">
         <div class="history-list" id="crashHistoryList"></div>
       </div>
       <div id="rouletteHistory" class="history-content">
         <div class="history-list" id="rouletteHistoryList"></div>
+      </div>
+      <div id="coinflipHistory" class="history-content">
+        <div class="history-list" id="coinflipHistoryList"></div>
+      </div>
+      <div id="diceHistory" class="history-content">
+        <div class="history-list" id="diceHistoryList"></div>
       </div>
     </section>
 
@@ -64,7 +72,7 @@
   </div>
 
   <script>
-    const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
 
     const usernameEl = document.getElementById('username');
@@ -78,6 +86,8 @@
     const depositMessage = document.getElementById('depositMessage');
     const crashHistoryList = document.getElementById('crashHistoryList');
     const rouletteHistoryList = document.getElementById('rouletteHistoryList');
+    const coinflipHistoryList = document.getElementById('coinflipHistoryList');
+    const diceHistoryList = document.getElementById('diceHistoryList');
     const depositHistoryList = document.getElementById('depositHistoryList');
 
     async function checkAuth() {
@@ -203,6 +213,40 @@
             card.appendChild(body);
             card.addEventListener('click', () => openRouletteHistoryModal(round));
             rouletteHistoryList.appendChild(card);
+          });
+        }
+
+        // Монетка
+        coinflipHistoryList.innerHTML = '';
+        if (!data.coinflip || !data.coinflip.length) {
+          coinflipHistoryList.innerHTML = '<div class="history-item muted">Нет игр в Монетку</div>';
+        } else {
+          data.coinflip.forEach((entry) => {
+            const row = document.createElement('div');
+            row.className = 'history-item';
+            const date = new Date(entry.timestamp);
+            const resultText = entry.win ? '→ Победа' : '→ Поражение';
+            const choice = entry.choice === 'tails' ? 'решка' : 'орёл';
+            const resultSide = entry.result === 'tails' ? 'решка' : 'орёл';
+            const net = entry.win ? entry.payout - entry.bet : -entry.bet;
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — выбрал ${choice}, выпал ${resultSide} ${resultText} (${net > 0 ? '+' : ''}${net}🍬)`;
+            coinflipHistoryList.appendChild(row);
+          });
+        }
+
+        // Дайс
+        diceHistoryList.innerHTML = '';
+        if (!data.dice || !data.dice.length) {
+          diceHistoryList.innerHTML = '<div class="history-item muted">Нет игр в Дайс</div>';
+        } else {
+          data.dice.forEach((entry) => {
+            const row = document.createElement('div');
+            row.className = 'history-item';
+            const date = new Date(entry.timestamp);
+            const resultText = entry.win ? '→ Победа' : '→ Поражение';
+            const net = entry.win ? entry.payout - entry.bet : -entry.bet;
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — выбрал ${entry.guess}, выпало ${entry.roll} ${resultText} (${net > 0 ? '+' : ''}${net}🍬)`;
+            diceHistoryList.appendChild(row);
           });
         }
 

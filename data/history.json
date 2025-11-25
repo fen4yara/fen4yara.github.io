@@ -191,5 +191,7 @@
       ],
       "winningTicket": 209.01023839884303
     }
-  ]
+  ],
+  "coinflipHistory": [],
+  "diceHistory": []
 }

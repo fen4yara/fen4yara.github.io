@@ -15,7 +15,7 @@
         <p class="muted">Готов сыграть ещё раунд? Баланс обновляется автоматически.</p>
       </div>
       <div class="link-row">
-        <a href="profile.html" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px">👤 Профиль</a>
+        <a href="profile.html" class="btn btn-secondary">👤 Профиль</a>
         <button id="logoutBtn" class="btn-outline">Выйти</button>
       </div>
     </header>
@@ -47,11 +47,25 @@
         <p class="muted">Стань одним из двух или более игроков, дели банк по ставкам и поймай сектор удачи.</p>
         <button class="btn-secondary" onclick="window.location.href='roulette.html'">Запустить «Рулетку»</button>
       </article>
+
+      <article class="glass-card game-card">
+        <span class="tag">🪙 Монетка</span>
+        <h3>50/50 Coinflip</h3>
+        <p class="muted">Выбери сторону монеты, задай ставку и проверь удачу в мгновенном раунде.</p>
+        <button class="btn-secondary" onclick="window.location.href='coinflip.html'">Играть в «Монетку»</button>
+      </article>
+
+      <article class="glass-card game-card">
+        <span class="tag">🎲 Дайс</span>
+        <h3>Neon Dice</h3>
+        <p class="muted">Угадай число от 1 до 6, брось кибер-кубик и сорви до ×6 от ставки.</p>
+        <button class="btn-secondary" onclick="window.location.href='dice.html'">Играть в «Дайс»</button>
+      </article>
     </section>
   </div>
 
   <script>
-    const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
 
     // Проверка авторизации при загрузке страницы
     async function checkAuth() {

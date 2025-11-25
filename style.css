@@ -172,6 +172,7 @@ p {
   transform: translateY(-1px);
 }
 
+.btn,
 button {
   border: none;
   border-radius: 16px;
@@ -183,9 +184,19 @@ button {
   width: 100%;
 }
 
+.btn:disabled,
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  text-decoration: none;
 }
 
 .btn-primary {
@@ -489,6 +500,30 @@ button.cashout {
   flex-wrap: wrap;
 }
 
+.option-toggle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.option-toggle .option-btn,
+.dice-grid .dice-btn {
+  width: 100%;
+}
+
+.option-btn.active,
+.dice-btn.active {
+  border-color: var(--accent);
+  background: rgba(127, 90, 240, 0.18);
+  box-shadow: 0 0 20px rgba(127, 90, 240, 0.2);
+}
+
+.dice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 10px;
+}
+
 .history-tabs {
   display: flex;
   gap: 8px;
@@ -522,6 +557,12 @@ button.cashout {
 
 .history-content.active {
   display: block;
+}
+
+.history-item.highlight {
+  border: 1px solid rgba(127, 90, 240, 0.25);
+  border-radius: 16px;
+  padding: 12px;
 }
 
 @media (max-width: 900px) {
