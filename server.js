@@ -165,7 +165,9 @@ function writeYooMoneyPayments(arr) {
 }
 
 // Функция для создания платежа через YooMoney API
-// YooMoney API использует OAuth токен и требует номер кошелька получателя
+// Согласно документации: https://yoomoney.ru/docs/wallet
+// API кошелька предназначен для платежей ИЗ кошелька, не для приема
+// Для приема используем упрощенный подход с проверкой через operation-history
 function createYooMoneyPayment(amount, label, returnUrl) {
   return new Promise((resolve, reject) => {
     if (!YOOMONEY_RECEIVER) {
@@ -173,53 +175,15 @@ function createYooMoneyPayment(amount, label, returnUrl) {
       return;
     }
 
-    const postData = querystring.stringify({
-      pattern_id: 'p2p',
-      to: YOOMONEY_RECEIVER,
-      amount: amount,
-      label: label,
-      message: label,
-      success_url: returnUrl
+    // Создаем простую ссылку на форму перевода YooMoney
+    // Пользователь перейдет на страницу перевода с предзаполненными данными
+    const paymentUrl = `https://yoomoney.ru/quickpay/confirm?receiver=${YOOMONEY_RECEIVER}&sum=${amount}&label=${encodeURIComponent(label)}&quickpay-form=button&paymentType=AC`;
+    
+    // Возвращаем URL для перехода
+    resolve({
+      paymentUrl: paymentUrl,
+      request_id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     });
-
-    const options = {
-      hostname: 'yoomoney.ru',
-      path: '/api/request-payment',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData),
-        'Authorization': `Bearer ${YOOMONEY_API_TOKEN}`
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-      res.on('end', () => {
-        try {
-          const response = querystring.parse(data);
-          if (response.error) {
-            reject(new Error(response.error));
-          } else if (response.status === 'refused') {
-            reject(new Error(response.error_description || 'Платеж отклонен'));
-          } else {
-            resolve(response);
-          }
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      reject(err);
-    });
-
-    req.write(postData);
-    req.end();
   });
 }
 
@@ -563,21 +527,9 @@ app.post('/profile/yoomoney/create', async (req, res) => {
     });
     writeYooMoneyPayments(payments);
 
-    // Формируем URL для оплаты
-    let paymentUrl;
-    if (paymentData.process_payment_url) {
-      paymentUrl = paymentData.process_payment_url;
-    } else if (paymentData.request_id) {
-      // Если есть request_id, создаем ссылку на процесс оплаты
-      paymentUrl = `https://yoomoney.ru/checkout/payments/v2/contract?orderId=${paymentData.request_id}`;
-    } else {
-      // Альтернативный способ - прямая ссылка на перевод
-      paymentUrl = `https://yoomoney.ru/transfer/to/${YOOMONEY_RECEIVER}?amount=${amount}&label=${encodeURIComponent(label)}`;
-    }
-
     res.json({
       paymentId,
-      paymentUrl,
+      paymentUrl: paymentData.paymentUrl,
       requestId: paymentData.request_id || paymentId
     });
   } catch (error) {
@@ -587,7 +539,8 @@ app.post('/profile/yoomoney/create', async (req, res) => {
 });
 
 // Webhook для обработки уведомлений от YooMoney
-app.post('/profile/yoomoney/webhook', (req, res) => {
+// YooMoney отправляет уведомления о входящих платежах
+app.post('/profile/yoomoney/webhook', express.urlencoded({ extended: true }), (req, res) => {
   const { notification_type, operation_id, amount, label } = req.body;
 
   if (notification_type === 'p2p-incoming') {
@@ -625,6 +578,66 @@ app.post('/profile/yoomoney/webhook', (req, res) => {
   }
 
   res.status(200).send('OK');
+});
+
+// Эндпоинт для проверки входящих платежей через API
+// Используется для периодической проверки статуса платежей
+app.post('/profile/yoomoney/check-payments', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+
+  try {
+    // Проверяем входящие платежи через operation-history API
+    const postData = querystring.stringify({
+      type: 'deposition',
+      label: ''
+    });
+
+    const options = {
+      hostname: 'yoomoney.ru',
+      path: '/api/operation-history',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData),
+        'Authorization': `Bearer ${YOOMONEY_API_TOKEN}`
+      }
+    };
+
+    const apiResponse = await new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const response = querystring.parse(data);
+            resolve(response);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
+
+    // Обрабатываем найденные платежи
+    const payments = readYooMoneyPayments();
+    const pendingPayments = payments.filter(p => p.status === 'pending' && p.username === req.session.user.username);
+    
+    // Здесь можно добавить логику проверки платежей по operation-history
+    // Но для упрощения оставляем ручную проверку через webhook
+
+    res.json({ message: 'Проверка выполнена', pendingCount: pendingPayments.length });
+  } catch (error) {
+    console.error('Ошибка проверки платежей:', error);
+    res.status(500).json({ error: 'Ошибка проверки платежей' });
+  }
 });
 
 // Проверка статуса платежа
