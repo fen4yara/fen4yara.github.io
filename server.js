@@ -57,7 +57,7 @@ const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.jso
 const YOOMONEY_API_TOKEN = '035C9025C933C61B6983BEF6FE1057707096DC0852888FA7CD453E30E0A98F7B';
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
 const ensureUsersFileExists = () => {
-  const dir = path.join(__dirname, 'data');
+  const dir = path.join(__dirname, 'data'); 
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
   if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '[]', 'utf-8');
 };
@@ -98,6 +98,14 @@ const ensurePromocodesFileExists = () => {
   }
 };
 ensurePromocodesFileExists();
+
+const ensureYooMoneyPaymentsFileExists = () => {
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+  if (!fs.existsSync(yoomoneyPaymentsFile)) {
+    fs.writeFileSync(yoomoneyPaymentsFile, '[]', 'utf-8');
+  }
+};
 ensureYooMoneyPaymentsFileExists();
 
 function readPromocodes() {
