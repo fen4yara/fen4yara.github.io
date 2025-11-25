@@ -580,18 +580,14 @@ app.post('/profile/yoomoney/webhook', express.urlencoded({ extended: true }), (r
   res.status(200).send('OK');
 });
 
-// Эндпоинт для проверки входящих платежей через API
-// Используется для периодической проверки статуса платежей
-app.post('/profile/yoomoney/check-payments', async (req, res) => {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Не авторизован' });
-  }
-
+// Функция для проверки входящих платежей через API YooMoney
+// Проверяет operation-history и автоматически пополняет баланс
+async function checkYooMoneyIncomingPayments() {
   try {
-    // Проверяем входящие платежи через operation-history API
+    // Получаем список входящих платежей через operation-history API
     const postData = querystring.stringify({
       type: 'deposition',
-      label: ''
+      records: '10' // Проверяем последние 10 операций
     });
 
     const options = {
@@ -628,36 +624,119 @@ app.post('/profile/yoomoney/check-payments', async (req, res) => {
 
     // Обрабатываем найденные платежи
     const payments = readYooMoneyPayments();
-    const pendingPayments = payments.filter(p => p.status === 'pending' && p.username === req.session.user.username);
-    
-    // Здесь можно добавить логику проверки платежей по operation-history
-    // Но для упрощения оставляем ручную проверку через webhook
+    const pendingPayments = payments.filter(p => p.status === 'pending');
+    let processedCount = 0;
 
-    res.json({ message: 'Проверка выполнена', pendingCount: pendingPayments.length });
+    // Если API вернул операции, проверяем их по label
+    // API может вернуть операции в разных форматах, обрабатываем оба
+    let operations = [];
+    if (apiResponse.operations && Array.isArray(apiResponse.operations)) {
+      operations = apiResponse.operations;
+    } else if (typeof apiResponse === 'string' && apiResponse.includes('operation')) {
+      // Если ответ в виде строки, пытаемся распарсить
+      try {
+        const parsed = querystring.parse(apiResponse);
+        if (parsed.operations) {
+          operations = Array.isArray(parsed.operations) ? parsed.operations : [parsed.operations];
+        }
+      } catch (e) {
+        console.error('Ошибка парсинга ответа API:', e);
+      }
+    }
+
+    for (const operation of operations) {
+      if (operation && operation.label) {
+        const payment = pendingPayments.find(p => {
+          // Проверяем точное совпадение label или частичное (на случай изменений формата)
+          return p.label === operation.label || 
+                 operation.label.includes(p.paymentId) ||
+                 p.label.includes(operation.label);
+        });
+        
+        if (payment && !payment.operationId) {
+          // Найден платеж, пополняем баланс
+          const paymentIndex = payments.findIndex(p => p.paymentId === payment.paymentId);
+          if (paymentIndex !== -1) {
+            payments[paymentIndex].status = 'success';
+            payments[paymentIndex].operationId = operation.operation_id || operation.operationId || 'unknown';
+            payments[paymentIndex].completedAt = Date.now();
+            writeYooMoneyPayments(payments);
+
+            const user = findUser(payment.username);
+            if (user) {
+              const updatedBalance = user.balance + payment.amount;
+              updateUserBalance(payment.username, updatedBalance);
+
+              // Добавляем в историю депозитов
+              const allDeposits = readDeposits();
+              allDeposits.push({
+                username: payment.username,
+                amount: payment.amount,
+                timestamp: Date.now(),
+                method: 'yoomoney',
+                paymentId: payment.paymentId
+              });
+              if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
+                allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
+              }
+              writeDeposits(allDeposits);
+              processedCount++;
+              console.log(`Платеж ${payment.paymentId} обработан, баланс пользователя ${payment.username} пополнен на ${payment.amount}`);
+            }
+          }
+        }
+      }
+    }
+
+    return { processedCount, pendingCount: pendingPayments.length - processedCount };
   } catch (error) {
-    console.error('Ошибка проверки платежей:', error);
-    res.status(500).json({ error: 'Ошибка проверки платежей' });
+    console.error('Ошибка проверки платежей YooMoney:', error);
+    return { error: error.message };
   }
+}
+
+// Эндпоинт для проверки входящих платежей через API
+// Используется для периодической проверки статуса платежей
+app.post('/profile/yoomoney/check-payments', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+
+  const result = await checkYooMoneyIncomingPayments();
+  res.json(result);
 });
 
+// Автоматическая проверка платежей каждые 30 секунд
+setInterval(async () => {
+  await checkYooMoneyIncomingPayments();
+}, 30000); // Проверяем каждые 30 секунд
+
 // Проверка статуса платежа
-app.get('/profile/yoomoney/check/:paymentId', (req, res) => {
+app.get('/profile/yoomoney/check/:paymentId', async (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
 
   const { paymentId } = req.params;
-  const payments = readYooMoneyPayments();
-  const payment = payments.find(p => p.paymentId === paymentId && p.username === req.session.user.username);
+  let payments = readYooMoneyPayments();
+  let payment = payments.find(p => p.paymentId === paymentId && p.username === req.session.user.username);
 
   if (!payment) {
     return res.status(404).json({ error: 'Платеж не найден' });
   }
 
+  // Если платеж еще pending, проверяем через API перед возвратом
+  if (payment.status === 'pending') {
+    await checkYooMoneyIncomingPayments();
+    // Обновляем данные платежа после проверки
+    payments = readYooMoneyPayments();
+    payment = payments.find(p => p.paymentId === paymentId);
+  }
+
   const user = findUser(req.session.user.username);
   res.json({
-    status: payment.status,
-    amount: payment.amount,
+    status: payment ? payment.status : 'pending',
+    amount: payment ? payment.amount : 0,
     balance: user ? user.balance : 0
   });
 });
