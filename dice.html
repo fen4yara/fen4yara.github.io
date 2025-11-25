@@ -104,14 +104,16 @@
         payoutEl.textContent = '0';
       }
 
-      // Исправленный расчет диапазонов в зависимости от выбранной стороны
-      const threshold = Math.floor((percent / 100) * 1000000);
+      // Процент применяется к выбранной стороне
+      let threshold;
       if (selectedSide === 'less') {
-        // Для "меньше": показываем диапазон 0 до threshold-1
+        // Для "меньше": процент применяется к "меньше"
+        threshold = Math.floor((percent / 100) * 1000000);
         rangeEl.textContent = `0 - ${threshold - 1}`;
         rangeEl2.style.display = 'none';
       } else {
-        // Для "больше": показываем диапазон threshold до 999999
+        // Для "больше": процент применяется к "больше", значит threshold = (100 - percent)
+        threshold = Math.floor(((100 - percent) / 100) * 1000000);
         rangeEl.textContent = `${threshold} - 999999`;
         rangeEl2.style.display = 'none';
       }

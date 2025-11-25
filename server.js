@@ -1049,12 +1049,17 @@ app.post('/dice/play', (req, res) => {
 
   // Генерируем число от 0 до 999999
   const roll = Math.floor(Math.random() * 1000000);
-  // Расчет порога: при 1% threshold = 10000, при 99% threshold = 990000
-  const threshold = Math.floor((percentNum / 100) * 1000000);
-  // Для "меньше": выигрыш если roll < threshold (0 до threshold-1 включительно)
-  // Для "больше": выигрыш если roll >= threshold (threshold до 999999 включительно)
-  // При 1%: threshold = 10000, меньше = 0-9999, больше = 10000-999999 (99% шанс)
-  // При 99%: threshold = 990000, меньше = 0-989999 (99% шанс), больше = 990000-999999 (1% шанс)
+  // Процент применяется к выбранной стороне
+  let threshold;
+  if (side === 'less') {
+    // Для "меньше": процент применяется к "меньше"
+    // При 1%: threshold = 10000, меньше = 0-9999 (1% шанс)
+    threshold = Math.floor((percentNum / 100) * 1000000);
+  } else {
+    // Для "больше": процент применяется к "больше"
+    // При 1%: threshold = 990000, больше = 990000-999999 (1% шанс, 10000 значений)
+    threshold = Math.floor(((100 - percentNum) / 100) * 1000000);
+  }
   const win = side === 'less' ? roll < threshold : roll >= threshold;
   const multiplier = 100 / percentNum;
   const payout = win ? Math.floor(bet * multiplier) : 0;
