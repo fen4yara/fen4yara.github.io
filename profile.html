@@ -72,7 +72,14 @@
       <button id="depositModalClose" class="modal-close" aria-label="Закрыть">✕</button>
       <div id="depositModalBody">
         <h2>Пополнение баланса</h2>
-        <p class="muted">Максимум 1000 🍬 раз в час</p>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 500;">Способ пополнения:</label>
+          <div style="display: flex; gap: 8px;">
+            <button id="depositMethodFree" class="btn btn-secondary" style="flex: 1;">Бесплатно (1-1000 🍬)</button>
+            <button id="depositMethodYooMoney" class="btn btn-secondary" style="flex: 1;">YooMoney (1-50000 ₽)</button>
+          </div>
+        </div>
+        <p class="muted" id="depositMethodDescription">Максимум 1000 🍬 раз в час</p>
         <input type="number" id="depositAmount" class="input-field" min="1" max="1000" placeholder="Сумма (1-1000)" />
         <button id="confirmDepositBtn" class="btn-primary" style="width:100%; margin-top:12px">Пополнить</button>
         <p id="depositMessage" class="message" style="margin-top:12px"></p>
@@ -93,6 +100,10 @@
     const depositAmount = document.getElementById('depositAmount');
     const confirmDepositBtn = document.getElementById('confirmDepositBtn');
     const depositMessage = document.getElementById('depositMessage');
+    const depositMethodFree = document.getElementById('depositMethodFree');
+    const depositMethodYooMoney = document.getElementById('depositMethodYooMoney');
+    const depositMethodDescription = document.getElementById('depositMethodDescription');
+    let currentDepositMethod = 'free'; // 'free' или 'yoomoney'
     const crashHistoryList = document.getElementById('crashHistoryList');
     const rouletteHistoryList = document.getElementById('rouletteHistoryList');
     const coinflipHistoryList = document.getElementById('coinflipHistoryList');
@@ -118,10 +129,61 @@
         balanceEl.textContent = user.balance;
         await loadDepositStatus();
         await loadHistory();
+
+        // Проверка платежа YooMoney при возврате
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentId = urlParams.get('payment');
+        if (paymentId) {
+          checkYooMoneyPayment(paymentId);
+          // Убираем параметр из URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
       } catch (err) {
         console.error('Auth error:', err);
         alert('Ошибка авторизации: ' + err.message);
         window.location.href = 'index.html';
+      }
+    }
+
+    async function checkYooMoneyPayment(paymentId) {
+      try {
+        const resp = await fetch(`${BASE_URL}/profile/yoomoney/check/${paymentId}`, {
+          credentials: 'include'
+        });
+        const data = await resp.json();
+        if (data.status === 'success') {
+          user.balance = data.balance;
+          balanceEl.textContent = user.balance;
+          await loadDepositStatus();
+          await loadHistory();
+          alert(`Платеж успешно обработан! Баланс пополнен на ${data.amount}₽.`);
+        } else if (data.status === 'pending') {
+          // Платеж еще обрабатывается, проверяем периодически
+          const checkInterval = setInterval(async () => {
+            try {
+              const checkResp = await fetch(`${BASE_URL}/profile/yoomoney/check/${paymentId}`, {
+                credentials: 'include'
+              });
+              const checkData = await checkResp.json();
+              if (checkData.status === 'success') {
+                clearInterval(checkInterval);
+                user.balance = checkData.balance;
+                balanceEl.textContent = user.balance;
+                await loadDepositStatus();
+                await loadHistory();
+                alert(`Платеж успешно обработан! Баланс пополнен на ${checkData.amount}₽.`);
+              } else if (checkData.status !== 'pending') {
+                clearInterval(checkInterval);
+              }
+            } catch (err) {
+              console.error('Ошибка проверки статуса платежа:', err);
+              clearInterval(checkInterval);
+            }
+          }, 5000);
+          setTimeout(() => clearInterval(checkInterval), 5 * 60 * 1000);
+        }
+      } catch (err) {
+        console.error('Ошибка проверки платежа:', err);
       }
     }
 
@@ -326,7 +388,42 @@
       depositModal.classList.remove('hidden');
       depositAmount.value = '';
       depositMessage.textContent = '';
+      currentDepositMethod = 'free';
+      updateDepositMethodUI();
     });
+
+    // Выбор способа пополнения
+    depositMethodFree.addEventListener('click', () => {
+      currentDepositMethod = 'free';
+      updateDepositMethodUI();
+    });
+
+    depositMethodYooMoney.addEventListener('click', () => {
+      currentDepositMethod = 'yoomoney';
+      updateDepositMethodUI();
+    });
+
+    function updateDepositMethodUI() {
+      if (currentDepositMethod === 'free') {
+        depositMethodFree.classList.add('btn-primary');
+        depositMethodFree.classList.remove('btn-secondary');
+        depositMethodYooMoney.classList.remove('btn-primary');
+        depositMethodYooMoney.classList.add('btn-secondary');
+        depositMethodDescription.textContent = 'Максимум 1000 🍬 раз в час';
+        depositAmount.min = '1';
+        depositAmount.max = '1000';
+        depositAmount.placeholder = 'Сумма (1-1000)';
+      } else {
+        depositMethodYooMoney.classList.add('btn-primary');
+        depositMethodYooMoney.classList.remove('btn-secondary');
+        depositMethodFree.classList.remove('btn-primary');
+        depositMethodFree.classList.add('btn-secondary');
+        depositMethodDescription.textContent = 'Пополнение через YooMoney (1-50000 ₽)';
+        depositAmount.min = '1';
+        depositAmount.max = '50000';
+        depositAmount.placeholder = 'Сумма в рублях (1-50000)';
+      }
+    }
 
     depositModalClose.addEventListener('click', () => {
       depositModal.classList.add('hidden');
@@ -340,39 +437,99 @@
 
     confirmDepositBtn.addEventListener('click', async () => {
       const amount = parseInt(depositAmount.value, 10);
-      if (!amount || amount < 1 || amount > 1000) {
-        depositMessage.textContent = 'Введите сумму от 1 до 1000';
-        depositMessage.className = 'message error';
-        return;
-      }
-
-      try {
-        confirmDepositBtn.disabled = true;
-        depositMessage.textContent = '';
-        const resp = await fetch(`${BASE_URL}/profile/deposit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ amount })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Ошибка пополнения');
+      
+      if (currentDepositMethod === 'free') {
+        if (!amount || amount < 1 || amount > 1000) {
+          depositMessage.textContent = 'Введите сумму от 1 до 1000';
+          depositMessage.className = 'message error';
+          return;
         }
-        depositMessage.textContent = `Баланс пополнен на ${amount}🍬!`;
-        depositMessage.className = 'message success';
-        user.balance = data.newBalance;
-        balanceEl.textContent = user.balance;
-        await loadDepositStatus();
-        await loadHistory();
-        setTimeout(() => {
-          depositModal.classList.add('hidden');
-        }, 1500);
-      } catch (err) {
-        depositMessage.textContent = err.message;
-        depositMessage.className = 'message error';
-      } finally {
-        confirmDepositBtn.disabled = false;
+
+        try {
+          confirmDepositBtn.disabled = true;
+          depositMessage.textContent = '';
+          const resp = await fetch(`${BASE_URL}/profile/deposit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ amount })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || 'Ошибка пополнения');
+          }
+          depositMessage.textContent = `Баланс пополнен на ${amount}🍬!`;
+          depositMessage.className = 'message success';
+          user.balance = data.newBalance;
+          balanceEl.textContent = user.balance;
+          await loadDepositStatus();
+          await loadHistory();
+          setTimeout(() => {
+            depositModal.classList.add('hidden');
+          }, 1500);
+        } catch (err) {
+          depositMessage.textContent = err.message;
+          depositMessage.className = 'message error';
+        } finally {
+          confirmDepositBtn.disabled = false;
+        }
+      } else {
+        // YooMoney пополнение
+        if (!amount || amount < 1 || amount > 50000) {
+          depositMessage.textContent = 'Введите сумму от 1 до 50000 рублей';
+          depositMessage.className = 'message error';
+          return;
+        }
+
+        try {
+          confirmDepositBtn.disabled = true;
+          depositMessage.textContent = 'Создание платежа...';
+          depositMessage.className = 'message';
+          const resp = await fetch(`${BASE_URL}/profile/yoomoney/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ amount })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || 'Ошибка создания платежа');
+          }
+          // Открываем ссылку на оплату
+          window.open(data.paymentUrl, '_blank');
+          depositMessage.textContent = 'Перейдите по ссылке для оплаты. После оплаты баланс будет пополнен автоматически.';
+          depositMessage.className = 'message success';
+          // Проверяем статус платежа каждые 5 секунд
+          const checkInterval = setInterval(async () => {
+            try {
+              const checkResp = await fetch(`${BASE_URL}/profile/yoomoney/check/${data.paymentId}`, {
+                credentials: 'include'
+              });
+              const checkData = await checkResp.json();
+              if (checkData.status === 'success') {
+                clearInterval(checkInterval);
+                depositMessage.textContent = `Баланс пополнен на ${amount}₽!`;
+                depositMessage.className = 'message success';
+                user.balance = checkData.balance;
+                balanceEl.textContent = user.balance;
+                await loadDepositStatus();
+                await loadHistory();
+                setTimeout(() => {
+                  depositModal.classList.add('hidden');
+                }, 2000);
+              }
+            } catch (err) {
+              console.error('Ошибка проверки статуса платежа:', err);
+            }
+          }, 5000);
+          // Останавливаем проверку через 5 минут
+          setTimeout(() => clearInterval(checkInterval), 5 * 60 * 1000);
+        } catch (err) {
+          depositMessage.textContent = err.message;
+          depositMessage.className = 'message error';
+        } finally {
+          confirmDepositBtn.disabled = false;
+        }
       }
     });
 

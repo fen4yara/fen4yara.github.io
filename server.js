@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const session = require('express-session');
 const cors = require('cors');
+const https = require('https');
+const querystring = require('querystring');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +51,11 @@ const historyFile = path.join(__dirname, 'data', 'history.json');
 const depositsFile = path.join(__dirname, 'data', 'deposits.json');
 const promocodesFile = path.join(__dirname, 'data', 'promocodes.json');
 const promocodeUsageFile = path.join(__dirname, 'data', 'promocode-usage.json');
+const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.json');
+
+// YooMoney API конфигурация
+const YOOMONEY_API_TOKEN = '035C9025C933C61B6983BEF6FE1057707096DC0852888FA7CD453E30E0A98F7B';
+const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -91,6 +98,7 @@ const ensurePromocodesFileExists = () => {
   }
 };
 ensurePromocodesFileExists();
+ensureYooMoneyPaymentsFileExists();
 
 function readPromocodes() {
   try {
@@ -132,6 +140,79 @@ function readDeposits() {
 
 function writeDeposits(arr) {
   fs.writeFileSync(depositsFile, JSON.stringify(arr, null, 2));
+}
+
+function readYooMoneyPayments() {
+  try {
+    const data = fs.readFileSync(yoomoneyPaymentsFile, 'utf-8');
+    return JSON.parse(data || '[]');
+  } catch (err) {
+    console.error('Ошибка чтения yoomoney-payments.json:', err);
+    return [];
+  }
+}
+
+function writeYooMoneyPayments(arr) {
+  fs.writeFileSync(yoomoneyPaymentsFile, JSON.stringify(arr, null, 2));
+}
+
+// Функция для создания платежа через YooMoney API
+// YooMoney API использует OAuth токен и требует номер кошелька получателя
+function createYooMoneyPayment(amount, label, returnUrl) {
+  return new Promise((resolve, reject) => {
+    if (!YOOMONEY_RECEIVER) {
+      reject(new Error('Не указан номер кошелька получателя (YOOMONEY_RECEIVER)'));
+      return;
+    }
+
+    const postData = querystring.stringify({
+      pattern_id: 'p2p',
+      to: YOOMONEY_RECEIVER,
+      amount: amount,
+      label: label,
+      message: label,
+      success_url: returnUrl
+    });
+
+    const options = {
+      hostname: 'yoomoney.ru',
+      path: '/api/request-payment',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData),
+        'Authorization': `Bearer ${YOOMONEY_API_TOKEN}`
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const response = querystring.parse(data);
+          if (response.error) {
+            reject(new Error(response.error));
+          } else if (response.status === 'refused') {
+            reject(new Error(response.error_description || 'Платеж отклонен'));
+          } else {
+            resolve(response);
+          }
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.write(postData);
+    req.end();
+  });
 }
 
 function getUserDepositsMeta(username) {
@@ -430,6 +511,133 @@ app.post('/profile/deposit', (req, res) => {
     newBalance: updatedBalance,
     nextDepositAt: metaAfterSave.nextDepositAt,
     deposits: metaAfterSave.userDeposits
+  });
+});
+
+// ======= YooMoney пополнение =======
+app.post('/profile/yoomoney/create', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const amount = Number(req.body.amount);
+  if (!Number.isFinite(amount) || amount < 1 || amount > 50000) {
+    return res.status(400).json({ error: 'Сумма должна быть от 1 до 50000 рублей' });
+  }
+
+  const username = req.session.user.username;
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
+  }
+
+  try {
+    // Создаем уникальный ID платежа
+    const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const label = `Пополнение баланса для ${username} (${paymentId})`;
+    const returnUrl = `https://fen4yaragithubio-production.up.railway.app/profile.html?payment=${paymentId}`;
+
+    // Создаем платеж через YooMoney API
+    const paymentData = await createYooMoneyPayment(amount, label, returnUrl);
+
+    // Сохраняем информацию о платеже
+    const payments = readYooMoneyPayments();
+    payments.push({
+      paymentId,
+      username,
+      amount,
+      label,
+      requestId: paymentData.request_id,
+      status: 'pending',
+      createdAt: Date.now()
+    });
+    writeYooMoneyPayments(payments);
+
+    // Формируем URL для оплаты
+    let paymentUrl;
+    if (paymentData.process_payment_url) {
+      paymentUrl = paymentData.process_payment_url;
+    } else if (paymentData.request_id) {
+      // Если есть request_id, создаем ссылку на процесс оплаты
+      paymentUrl = `https://yoomoney.ru/checkout/payments/v2/contract?orderId=${paymentData.request_id}`;
+    } else {
+      // Альтернативный способ - прямая ссылка на перевод
+      paymentUrl = `https://yoomoney.ru/transfer/to/${YOOMONEY_RECEIVER}?amount=${amount}&label=${encodeURIComponent(label)}`;
+    }
+
+    res.json({
+      paymentId,
+      paymentUrl,
+      requestId: paymentData.request_id || paymentId
+    });
+  } catch (error) {
+    console.error('Ошибка создания платежа YooMoney:', error);
+    res.status(500).json({ error: 'Ошибка создания платежа: ' + error.message });
+  }
+});
+
+// Webhook для обработки уведомлений от YooMoney
+app.post('/profile/yoomoney/webhook', (req, res) => {
+  const { notification_type, operation_id, amount, label } = req.body;
+
+  if (notification_type === 'p2p-incoming') {
+    // Находим платеж по label
+    const payments = readYooMoneyPayments();
+    const payment = payments.find(p => p.label === label && p.status === 'pending');
+
+    if (payment) {
+      payment.status = 'success';
+      payment.operationId = operation_id;
+      payment.completedAt = Date.now();
+      writeYooMoneyPayments(payments);
+
+      // Пополняем баланс пользователя
+      const user = findUser(payment.username);
+      if (user) {
+        const updatedBalance = user.balance + payment.amount;
+        updateUserBalance(payment.username, updatedBalance);
+
+        // Добавляем в историю депозитов
+        const allDeposits = readDeposits();
+        allDeposits.push({
+          username: payment.username,
+          amount: payment.amount,
+          timestamp: Date.now(),
+          method: 'yoomoney',
+          paymentId: payment.paymentId
+        });
+        if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
+          allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
+        }
+        writeDeposits(allDeposits);
+      }
+    }
+  }
+
+  res.status(200).send('OK');
+});
+
+// Проверка статуса платежа
+app.get('/profile/yoomoney/check/:paymentId', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+
+  const { paymentId } = req.params;
+  const payments = readYooMoneyPayments();
+  const payment = payments.find(p => p.paymentId === paymentId && p.username === req.session.user.username);
+
+  if (!payment) {
+    return res.status(404).json({ error: 'Платеж не найден' });
+  }
+
+  const user = findUser(req.session.user.username);
+  res.json({
+    status: payment.status,
+    amount: payment.amount,
+    balance: user ? user.balance : 0
   });
 });
 
