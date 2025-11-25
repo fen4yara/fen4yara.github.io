@@ -53,7 +53,7 @@
       <div>
         <p class="muted">Диапазон</p>
         <div class="range-display" id="diceRange">0 - 499999</div>
-        <div class="range-display" id="diceRange2">500000 - 999999</div>
+        <div class="range-display" id="diceRange2" style="display:none;">500000 - 999999</div>
       </div>
 
       <div class="option-toggle">
@@ -104,24 +104,31 @@
         payoutEl.textContent = '0';
       }
 
-      // Исправленный расчет диапазонов
+      // Исправленный расчет диапазонов в зависимости от выбранной стороны
       const threshold = Math.floor((percent / 100) * 1000000);
-      // Для "меньше": 0 до threshold-1
-      // Для "больше": threshold до 999999
-      rangeEl.textContent = `0 - ${threshold - 1}`;
-      rangeEl2.textContent = `${threshold} - 999999`;
+      if (selectedSide === 'less') {
+        // Для "меньше": показываем диапазон 0 до threshold-1
+        rangeEl.textContent = `0 - ${threshold - 1}`;
+        rangeEl2.style.display = 'none';
+      } else {
+        // Для "больше": показываем диапазон threshold до 999999
+        rangeEl.textContent = `${threshold} - 999999`;
+        rangeEl2.style.display = 'none';
+      }
     }
 
     lessBtn.addEventListener('click', () => {
       selectedSide = 'less';
       lessBtn.classList.add('active');
       moreBtn.classList.remove('active');
+      updateMultiplier();
     });
 
     moreBtn.addEventListener('click', () => {
       selectedSide = 'more';
       moreBtn.classList.add('active');
       lessBtn.classList.remove('active');
+      updateMultiplier();
     });
 
     percentInput.addEventListener('input', updateMultiplier);

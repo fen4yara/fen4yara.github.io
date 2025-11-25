@@ -207,6 +207,7 @@ button:disabled {
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
+  background: rgba(100, 100, 120, 0.6);
 }
 
 .btn-secondary {
