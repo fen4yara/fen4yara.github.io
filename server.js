@@ -589,15 +589,28 @@ app.post('/profile/yoomoney/create', async (req, res) => {
 
 // Webhook для обработки уведомлений от YooMoney
 // YooMoney отправляет уведомления о входящих платежах
+// Для quickpay формы нужно настроить webhook URL в настройках кошелька YooMoney
 app.post('/profile/yoomoney/webhook', express.urlencoded({ extended: true }), (req, res) => {
+  console.log('Webhook от YooMoney получен:', JSON.stringify(req.body));
+  
   const { notification_type, operation_id, amount, label } = req.body;
 
-  if (notification_type === 'p2p-incoming') {
+  if (notification_type === 'p2p-incoming' || notification_type === 'payment') {
     // Находим платеж по label
     const payments = readYooMoneyPayments();
-    const payment = payments.find(p => p.label === label && p.status === 'pending');
+    let payment = null;
+    
+    if (label) {
+      payment = payments.find(p => {
+        const paymentLabel = String(p.label).trim();
+        const incomingLabel = String(label).trim();
+        return paymentLabel === incomingLabel || 
+               incomingLabel.includes(p.paymentId) ||
+               paymentLabel.includes(incomingLabel);
+      });
+    }
 
-    if (payment) {
+    if (payment && payment.status === 'pending') {
       payment.status = 'success';
       payment.operationId = operation_id;
       payment.completedAt = Date.now();
@@ -622,7 +635,11 @@ app.post('/profile/yoomoney/webhook', express.urlencoded({ extended: true }), (r
           allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
         }
         writeDeposits(allDeposits);
+        
+        console.log(`✅ Платеж ${payment.paymentId} обработан через webhook, баланс пользователя ${payment.username} пополнен на ${payment.amount} руб.`);
       }
+    } else if (!payment) {
+      console.log(`⚠️ Платеж с label "${label}" не найден в ожидающих платежах`);
     }
   }
 
@@ -692,140 +709,37 @@ function parseYooMoneyXML(xmlString) {
   };
 }
 
-// Функция для проверки входящих платежей через API YooMoney
-// Согласно документации: https://yoomoney.ru/docs/wallet
-// API возвращает XML формат
+// Функция для проверки входящих платежей
+// ВАЖНО: Для quickpay формы не требуется API кошелька YooMoney
+// Quickpay форма работает через обычные переводы, а не через API кошелька
+// Основная проверка происходит через webhook уведомления
+// Эта функция используется только для логирования и статистики
 async function checkYooMoneyIncomingPayments() {
   try {
-    // Получаем список входящих платежей через operation-history API
-    // Согласно документации, запрос должен быть в формате form-urlencoded
-    const postData = querystring.stringify({
-      type: 'deposition',
-      records: '10' // Проверяем последние 10 операций
-    });
-
-    const options = {
-      hostname: 'yoomoney.ru',
-      path: '/api/operation-history',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData),
-        'Authorization': `Bearer ${YOOMONEY_API_TOKEN}`
-      }
-    };
-
-    const xmlResponse = await new Promise((resolve, reject) => {
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          if (res.statusCode !== 200) {
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
-          } else {
-            resolve(data);
-          }
-        });
-      });
-
-      req.on('error', reject);
-      req.write(postData);
-      req.end();
-    });
-
-    // Парсим XML ответ
-    let parsedResponse;
-    try {
-      parsedResponse = parseYooMoneyXML(xmlResponse);
-      console.log(`Успешно распарсено XML, найдено операций: ${parsedResponse.operations?.operation?.length || 0}`);
-    } catch (parseError) {
-      console.error('Ошибка парсинга XML ответа:', parseError);
-      console.log('Первые 500 символов ответа:', xmlResponse.substring(0, 500));
-      parsedResponse = { operations: { operation: [] } };
-    }
-
-    // Обрабатываем найденные платежи
+    // Для quickpay формы мы не можем использовать operation-history API
+    // так как он требует OAuth токен, который нужно получать через регистрацию приложения
+    // Вместо этого полагаемся на webhook уведомления
+    
     const payments = readYooMoneyPayments();
     const pendingPayments = payments.filter(p => p.status === 'pending');
-    let processedCount = 0;
+    
+    // Проверяем платежи, которые были созданы недавно (последние 30 минут)
+    // Если платеж был создан давно и все еще pending, возможно он не был оплачен
+    const now = Date.now();
+    const recentPayments = pendingPayments.filter(p => {
+      const timeDiff = now - p.createdAt;
+      return timeDiff < 30 * 60 * 1000; // Последние 30 минут
+    });
 
-    // Извлекаем операции из XML ответа
-    let operations = [];
-    if (parsedResponse && parsedResponse.operations) {
-      if (parsedResponse.operations.operation) {
-        if (Array.isArray(parsedResponse.operations.operation)) {
-          operations = parsedResponse.operations.operation;
-        } else {
-          operations = [parsedResponse.operations.operation];
-        }
-      }
-    }
+    console.log(`Ожидающих платежей: ${pendingPayments.length}, из них недавних: ${recentPayments.length}`);
 
-    console.log(`Получено ${operations.length} операций из API YooMoney`);
-
-    // Проверяем каждую операцию на соответствие ожидающим платежам
-    for (const operation of operations) {
-      if (!operation || !operation.label) continue;
-
-      const operationLabel = String(operation.label).trim();
-      
-      // Ищем платеж по label (точное совпадение или частичное)
-      const payment = pendingPayments.find(p => {
-        const paymentLabel = String(p.label).trim();
-        return paymentLabel === operationLabel || 
-               operationLabel.includes(p.paymentId) ||
-               paymentLabel.includes(operationLabel);
-      });
-      
-      if (payment && !payment.operationId) {
-        // Найден платеж, пополняем баланс
-        const paymentIndex = payments.findIndex(p => p.paymentId === payment.paymentId);
-        if (paymentIndex !== -1) {
-          payments[paymentIndex].status = 'success';
-          payments[paymentIndex].operationId = operation.operation_id || operation.operationId || 'unknown';
-          payments[paymentIndex].completedAt = Date.now();
-          writeYooMoneyPayments(payments);
-
-          const user = findUser(payment.username);
-          if (user) {
-            const updatedBalance = user.balance + payment.amount;
-            updateUserBalance(payment.username, updatedBalance);
-
-            // Добавляем в историю депозитов
-            const allDeposits = readDeposits();
-            allDeposits.push({
-              username: payment.username,
-              amount: payment.amount,
-              timestamp: Date.now(),
-              method: 'yoomoney',
-              paymentId: payment.paymentId
-            });
-            if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
-              allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
-            }
-            writeDeposits(allDeposits);
-            processedCount++;
-            console.log(`✅ Платеж ${payment.paymentId} обработан, баланс пользователя ${payment.username} пополнен на ${payment.amount} руб.`);
-          }
-        }
-      }
-    }
-
-    // Если не нашли платежи через API, логируем для отладки
-    if (processedCount === 0 && pendingPayments.length > 0) {
-      console.log(`Не найдено совпадений для ${pendingPayments.length} ожидающих платежей`);
-      if (operations.length > 0) {
-        console.log('Примеры label из API:', operations.slice(0, 3).map(op => op.label));
-        console.log('Примеры label ожидающих платежей:', pendingPayments.slice(0, 3).map(p => p.label));
-      }
-    }
-
-    return { processedCount, pendingCount: pendingPayments.length - processedCount };
+    // Основная обработка платежей происходит через webhook endpoint
+    // Эта функция только для статистики
+    
+    return { processedCount: 0, pendingCount: pendingPayments.length };
   } catch (error) {
-    console.error('Ошибка проверки платежей YooMoney:', error);
-    return { error: error.message };
+    // Не логируем ошибку, так как мы не используем API
+    return { processedCount: 0, pendingCount: 0 };
   }
 }
 
@@ -840,10 +754,15 @@ app.post('/profile/yoomoney/check-payments', async (req, res) => {
   res.json(result);
 });
 
-// Автоматическая проверка платежей каждые 30 секунд
+// Автоматическая проверка платежей каждые 60 секунд (только для статистики)
+// Основная обработка происходит через webhook
 setInterval(async () => {
-  await checkYooMoneyIncomingPayments();
-}, 30000); // Проверяем каждые 30 секунд
+  try {
+    await checkYooMoneyIncomingPayments();
+  } catch (error) {
+    // Игнорируем ошибки, так как основная обработка через webhook
+  }
+}, 60000); // Проверяем каждые 60 секунд
 
 // Проверка статуса платежа
 app.get('/profile/yoomoney/check/:paymentId', async (req, res) => {
