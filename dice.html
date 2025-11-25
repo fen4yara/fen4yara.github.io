@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">Режим</p>
         <h1>🎲 Neon Dice</h1>
-        <p class="muted">Выбери число от 1 до 6, брось кубик и получи до ×6 от ставки.</p>
+        <p class="muted">Выбери диапазон и процент, ставь на меньше или больше.</p>
       </div>
       <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
     </header>
@@ -23,21 +23,45 @@
       </div>
 
       <div>
-        <p class="muted">Твоё число</p>
-        <div class="dice-grid" id="diceGrid">
-          <button class="btn-secondary dice-btn active" data-number="1">1</button>
-          <button class="btn-secondary dice-btn" data-number="2">2</button>
-          <button class="btn-secondary dice-btn" data-number="3">3</button>
-          <button class="btn-secondary dice-btn" data-number="4">4</button>
-          <button class="btn-secondary dice-btn" data-number="5">5</button>
-          <button class="btn-secondary dice-btn" data-number="6">6</button>
+        <p class="muted">Сумма</p>
+        <input type="number" id="diceBet" min="1" class="input-field" placeholder="Введите сумму" />
+        <div class="quick-bet-buttons">
+          <button class="btn-secondary quick-btn" data-action="double">Удвоить</button>
+          <button class="btn-secondary quick-btn" data-action="half">Половина</button>
+          <button class="btn-secondary quick-btn" data-action="max">Макс</button>
+          <button class="btn-secondary quick-btn" data-action="min">Мин</button>
         </div>
       </div>
 
-      <label for="diceBet" class="muted">Ставка</label>
-      <input type="number" id="diceBet" min="1" class="input-field" placeholder="Введите сумму" />
+      <div>
+        <p class="muted">Процент</p>
+        <input type="number" id="dicePercent" min="1" max="99" value="50" class="input-field" />
+        <div class="quick-bet-buttons">
+          <button class="btn-secondary quick-btn" data-action="percent-double">Удвоить</button>
+          <button class="btn-secondary quick-btn" data-action="percent-half">Половина</button>
+          <button class="btn-secondary quick-btn" data-action="percent-max">Макс</button>
+          <button class="btn-secondary quick-btn" data-action="percent-min">Мин</button>
+        </div>
+      </div>
 
-      <button id="diceRollBtn" class="btn-primary">Бросить кубик</button>
+      <div>
+        <p class="muted">Множитель</p>
+        <h2 id="diceMultiplier">2.00x</h2>
+        <p class="stat-subtext">Возможный выигрыш: <span id="dicePayout">0</span> 🍬</p>
+      </div>
+
+      <div>
+        <p class="muted">Диапазон</p>
+        <div class="range-display" id="diceRange">0 - 499999</div>
+        <div class="range-display" id="diceRange2">500000 - 999999</div>
+      </div>
+
+      <div class="option-toggle">
+        <button class="btn-secondary option-btn active" id="diceLessBtn" data-side="less">Меньше</button>
+        <button class="btn-secondary option-btn" id="diceMoreBtn" data-side="more">Больше</button>
+      </div>
+
+      <button id="diceRollBtn" class="btn-primary">Играть</button>
       <p id="diceStatus" class="message"></p>
     </section>
 
@@ -50,20 +74,77 @@
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
-    let selectedNumber = 1;
+    let selectedSide = 'less';
+    let lastBet = 0;
 
     const balanceEl = document.getElementById('diceBalance');
     const betInput = document.getElementById('diceBet');
+    const percentInput = document.getElementById('dicePercent');
+    const multiplierEl = document.getElementById('diceMultiplier');
+    const payoutEl = document.getElementById('dicePayout');
+    const rangeEl = document.getElementById('diceRange');
+    const rangeEl2 = document.getElementById('diceRange2');
     const statusEl = document.getElementById('diceStatus');
     const historyList = document.getElementById('diceHistoryList');
     const rollBtn = document.getElementById('diceRollBtn');
-    const diceButtons = document.querySelectorAll('.dice-btn');
+    const lessBtn = document.getElementById('diceLessBtn');
+    const moreBtn = document.getElementById('diceMoreBtn');
+    const quickBtns = document.querySelectorAll('.quick-btn');
 
-    diceButtons.forEach((btn) => {
+    function updateMultiplier() {
+      const percent = Number(percentInput.value) || 50;
+      const multiplier = (100 / percent).toFixed(2);
+      multiplierEl.textContent = `${multiplier}x`;
+      
+      const bet = Number(betInput.value) || 0;
+      if (bet > 0) {
+        const payout = Math.floor(bet * multiplier);
+        payoutEl.textContent = payout;
+      } else {
+        payoutEl.textContent = '0';
+      }
+
+      const range1 = Math.floor((percent / 100) * 1000000);
+      rangeEl.textContent = `0 - ${range1 - 1}`;
+      rangeEl2.textContent = `${range1} - 999999`;
+    }
+
+    lessBtn.addEventListener('click', () => {
+      selectedSide = 'less';
+      lessBtn.classList.add('active');
+      moreBtn.classList.remove('active');
+    });
+
+    moreBtn.addEventListener('click', () => {
+      selectedSide = 'more';
+      moreBtn.classList.add('active');
+      lessBtn.classList.remove('active');
+    });
+
+    percentInput.addEventListener('input', updateMultiplier);
+    betInput.addEventListener('input', updateMultiplier);
+
+    quickBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        selectedNumber = Number(btn.dataset.number);
-        diceButtons.forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
+        const action = btn.dataset.action;
+        if (action === 'double') {
+          betInput.value = (Number(betInput.value) || 0) * 2;
+        } else if (action === 'half') {
+          betInput.value = Math.floor((Number(betInput.value) || 0) / 2);
+        } else if (action === 'max') {
+          betInput.value = user ? user.balance : 0;
+        } else if (action === 'min') {
+          betInput.value = 1;
+        } else if (action === 'percent-double') {
+          percentInput.value = Math.min(99, (Number(percentInput.value) || 50) * 2);
+        } else if (action === 'percent-half') {
+          percentInput.value = Math.max(1, Math.floor((Number(percentInput.value) || 50) / 2));
+        } else if (action === 'percent-max') {
+          percentInput.value = 99;
+        } else if (action === 'percent-min') {
+          percentInput.value = 1;
+        }
+        updateMultiplier();
       });
     });
 
@@ -73,6 +154,10 @@
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
         balanceEl.textContent = user.balance;
+        if (lastBet > 0) {
+          betInput.value = lastBet;
+          updateMultiplier();
+        }
         await loadHistory();
       } catch (err) {
         alert('Сначала войдите в аккаунт');
@@ -82,8 +167,15 @@
 
     async function rollDice() {
       const bet = Number(betInput.value);
+      const percent = Number(percentInput.value);
+      
       if (!bet || bet <= 0) {
         statusEl.textContent = 'Введите корректную ставку';
+        statusEl.className = 'message error';
+        return;
+      }
+      if (percent < 1 || percent > 99) {
+        statusEl.textContent = 'Процент должен быть от 1 до 99';
         statusEl.className = 'message error';
         return;
       }
@@ -95,16 +187,20 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ bet, guess: selectedNumber })
+          body: JSON.stringify({ bet, percent, side: selectedSide })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
+        
+        user.balance = data.newBalance;
         balanceEl.textContent = data.newBalance;
+        lastBet = bet;
+        
         statusEl.textContent = data.win
           ? `🎉 Выпало ${data.roll}. Победа! Выигрыш: ${data.payout}🍬`
           : `🙅 Выпало ${data.roll}. Попробуй ещё`;
         statusEl.className = `message ${data.win ? 'success' : 'error'}`;
-        betInput.value = '';
+        
         await loadHistory(data.history);
       } catch (err) {
         statusEl.textContent = err.message;
@@ -137,9 +233,10 @@
         if (user && entry.username === user.username) {
           item.classList.add('highlight');
         }
-        const date = new Date(entry.timestamp).toLocaleString('ru-RU');
+        const date = new Date(entry.timestamp).toLocaleTimeString('ru-RU');
         const outcome = entry.win ? '→ Победа' : '→ Поражение';
-        item.innerHTML = `<strong>${date}</strong> — ${entry.username} выбрал ${entry.guess}, выпало ${entry.roll} ${outcome} (${entry.bet}🍬)`;
+        const sideText = entry.side === 'less' ? 'Меньше' : 'Больше';
+        item.innerHTML = `<strong>${date}</strong> — ${entry.username}: ${sideText} ${entry.percent}%, выпало ${entry.roll} ${outcome} (${entry.bet}🍬)`;
         historyList.appendChild(item);
       });
     }
@@ -149,4 +246,3 @@
   </script>
 </body>
 </html>
-

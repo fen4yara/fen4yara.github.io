@@ -68,6 +68,7 @@
     let nextSpinTimestamp = null;
     let countdownInterval = null;
     let rouletteHistoryCache = [];
+    let lastBet = 0;
 
     const balanceEl = document.getElementById('balance');
     const messageEl = document.getElementById('message');
@@ -527,6 +528,9 @@
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
+        if (lastBet > 0) {
+          document.getElementById('bet').value = lastBet;
+        }
         balanceEl.textContent = user.balance;
 
         await fetchPlayersAndDraw();
@@ -573,6 +577,8 @@
           balanceEl.textContent = user.balance;
         }
         showMessage('Вы в игре. Ждём спина...', '#333');
+        lastBet = betValue;
+        document.getElementById('bet').value = betValue;
 
         // Теперь корректно рассчитываем локальную метку для отсчёта
         if (data.nextSpin !== null) {

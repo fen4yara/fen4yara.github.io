@@ -47,6 +47,7 @@
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
     let selectedSide = 'heads';
+    let lastBet = 0;
 
     const balanceEl = document.getElementById('balance');
     const betInput = document.getElementById('betAmount');
@@ -73,6 +74,9 @@
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
         balanceEl.textContent = user.balance;
+        if (lastBet > 0) {
+          betInput.value = lastBet;
+        }
         await loadHistory();
       } catch (err) {
         alert('Сначала войдите в аккаунт');
@@ -104,7 +108,8 @@
           ? `🎉 Выпал ${formatSide(data.result)}. Выигрыш: ${data.payout}🍬`
           : `🤕 Выпал ${formatSide(data.result)}. Ставка проиграна`;
         statusEl.className = `message ${data.win ? 'success' : 'error'}`;
-        betInput.value = '';
+        lastBet = bet;
+        betInput.value = bet;
         await loadHistory(data.history);
       } catch (err) {
         statusEl.textContent = err.message;

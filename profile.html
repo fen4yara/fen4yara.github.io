@@ -56,6 +56,15 @@
       <p class="eyebrow">История депозитов</p>
       <div class="history-list" id="depositHistoryList"></div>
     </section>
+
+    <section class="glass-card">
+      <p class="eyebrow">Промокод</p>
+      <div class="inline-form">
+        <input type="text" id="promocodeInput" class="input-field" placeholder="Введите промокод" />
+        <button id="activatePromocodeBtn" class="btn-primary" style="width: auto;">Активировать</button>
+      </div>
+      <p id="promocodeMessage" class="message" style="margin-top: 12px;"></p>
+    </section>
   </div>
 
   <div id="depositModal" class="modal-overlay hidden">
@@ -89,6 +98,9 @@
     const coinflipHistoryList = document.getElementById('coinflipHistoryList');
     const diceHistoryList = document.getElementById('diceHistoryList');
     const depositHistoryList = document.getElementById('depositHistoryList');
+    const promocodeInput = document.getElementById('promocodeInput');
+    const activatePromocodeBtn = document.getElementById('activatePromocodeBtn');
+    const promocodeMessage = document.getElementById('promocodeMessage');
 
     async function checkAuth() {
       try {
@@ -361,6 +373,43 @@
         depositMessage.className = 'message error';
       } finally {
         confirmDepositBtn.disabled = false;
+      }
+    });
+
+    activatePromocodeBtn.addEventListener('click', async () => {
+      const code = promocodeInput.value.trim();
+      if (!code) {
+        promocodeMessage.textContent = 'Введите промокод';
+        promocodeMessage.className = 'message error';
+        return;
+      }
+
+      try {
+        activatePromocodeBtn.disabled = true;
+        promocodeMessage.textContent = '';
+        const resp = await fetch(`${BASE_URL}/promocode/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ code })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка активации');
+        }
+        promocodeMessage.textContent = data.message;
+        promocodeMessage.className = 'message success';
+        user.balance = data.newBalance;
+        balanceEl.textContent = user.balance;
+        promocodeInput.value = '';
+        setTimeout(() => {
+          promocodeMessage.textContent = '';
+        }, 3000);
+      } catch (err) {
+        promocodeMessage.textContent = err.message;
+        promocodeMessage.className = 'message error';
+      } finally {
+        activatePromocodeBtn.disabled = false;
       }
     });
 

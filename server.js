@@ -47,6 +47,8 @@ app.use(express.static(path.join(__dirname)));
 const usersFile = path.join(__dirname, 'data', 'users.json');
 const historyFile = path.join(__dirname, 'data', 'history.json');
 const depositsFile = path.join(__dirname, 'data', 'deposits.json');
+const promocodesFile = path.join(__dirname, 'data', 'promocodes.json');
+const promocodeUsageFile = path.join(__dirname, 'data', 'promocode-usage.json');
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -77,6 +79,46 @@ const ensureDepositsFileExists = () => {
   }
 };
 ensureDepositsFileExists();
+
+const ensurePromocodesFileExists = () => {
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+  if (!fs.existsSync(promocodesFile)) {
+    fs.writeFileSync(promocodesFile, '[]', 'utf-8');
+  }
+  if (!fs.existsSync(promocodeUsageFile)) {
+    fs.writeFileSync(promocodeUsageFile, '{}', 'utf-8');
+  }
+};
+ensurePromocodesFileExists();
+
+function readPromocodes() {
+  try {
+    const data = fs.readFileSync(promocodesFile, 'utf-8');
+    return JSON.parse(data || '[]');
+  } catch (err) {
+    console.error('Ошибка чтения promocodes.json:', err);
+    return [];
+  }
+}
+
+function writePromocodes(arr) {
+  fs.writeFileSync(promocodesFile, JSON.stringify(arr, null, 2));
+}
+
+function readPromocodeUsage() {
+  try {
+    const data = fs.readFileSync(promocodeUsageFile, 'utf-8');
+    return JSON.parse(data || '{}');
+  } catch (err) {
+    console.error('Ошибка чтения promocode-usage.json:', err);
+    return {};
+  }
+}
+
+function writePromocodeUsage(obj) {
+  fs.writeFileSync(promocodeUsageFile, JSON.stringify(obj, null, 2));
+}
 
 function readDeposits() {
   try {
@@ -982,13 +1024,16 @@ app.post('/dice/play', (req, res) => {
     return res.status(401).json({ error: 'Не авторизован' });
   }
   const username = req.session.user.username;
-  const { bet, guess } = req.body;
+  const { bet, percent, side } = req.body;
   if (!bet || typeof bet !== 'number' || bet <= 0) {
     return res.status(400).json({ error: 'Некорректная ставка' });
   }
-  const guessNumber = Number(guess);
-  if (!Number.isInteger(guessNumber) || guessNumber < 1 || guessNumber > 6) {
-    return res.status(400).json({ error: 'Число должно быть от 1 до 6' });
+  const percentNum = Number(percent);
+  if (!Number.isFinite(percentNum) || percentNum < 1 || percentNum > 99) {
+    return res.status(400).json({ error: 'Процент должен быть от 1 до 99' });
+  }
+  if (!['less', 'more'].includes(side)) {
+    return res.status(400).json({ error: 'Выберите меньше или больше' });
   }
 
   const user = findUser(username);
@@ -1002,9 +1047,12 @@ app.post('/dice/play', (req, res) => {
   const balanceAfterBet = user.balance - bet;
   updateUserBalance(username, balanceAfterBet);
 
-  const roll = Math.floor(Math.random() * 6) + 1;
-  const win = roll === guessNumber;
-  const payout = win ? bet * 6 : 0;
+  // Генерируем число от 0 до 999999
+  const roll = Math.floor(Math.random() * 1000000);
+  const threshold = Math.floor((percentNum / 100) * 1000000);
+  const win = side === 'less' ? roll < threshold : roll >= threshold;
+  const multiplier = 100 / percentNum;
+  const payout = win ? Math.floor(bet * multiplier) : 0;
   let finalBalance = balanceAfterBet;
   if (win) {
     finalBalance += payout;
@@ -1014,7 +1062,8 @@ app.post('/dice/play', (req, res) => {
   const entry = {
     username,
     bet,
-    guess: guessNumber,
+    percent: percentNum,
+    side,
     roll,
     win,
     payout,
@@ -1031,6 +1080,56 @@ app.post('/dice/play', (req, res) => {
     payout,
     newBalance: finalBalance,
     history: diceHistory
+  });
+});
+
+// ======= Промокоды =======
+app.post('/promocode/activate', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const { code } = req.body;
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'Введите промокод' });
+  }
+
+  const promocodes = readPromocodes();
+  const promocode = promocodes.find((p) => p.code.toLowerCase() === code.toLowerCase());
+  if (!promocode) {
+    return res.status(404).json({ error: 'Промокод не найден' });
+  }
+
+  const usage = readPromocodeUsage();
+  const userUsed = usage[username] || [];
+  if (userUsed.includes(promocode.code.toLowerCase())) {
+    return res.status(400).json({ error: 'Вы уже использовали этот промокод' });
+  }
+
+  if (promocode.activationsLeft <= 0) {
+    return res.status(400).json({ error: 'Промокод закончился' });
+  }
+
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+
+  // Активируем промокод
+  promocode.activationsLeft--;
+  writePromocodes(promocodes);
+
+  if (!usage[username]) usage[username] = [];
+  usage[username].push(promocode.code.toLowerCase());
+  writePromocodeUsage(usage);
+
+  const newBalance = user.balance + promocode.reward;
+  updateUserBalance(username, newBalance);
+
+  res.json({
+    message: `Промокод активирован! Получено ${promocode.reward}🍬`,
+    reward: promocode.reward,
+    newBalance
   });
 });
 

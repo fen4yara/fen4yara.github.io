@@ -357,7 +357,8 @@ button.cashout {
 
 .history-card .history-item {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 12px 0;
+  padding: 6px 0;
+  font-size: 0.9rem;
 }
 
 .history-card .history-item:last-child {
@@ -366,9 +367,9 @@ button.cashout {
 
 .history-players {
   padding-left: 18px;
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .wheel-wrapper {
@@ -563,6 +564,28 @@ button.cashout {
   border: 1px solid rgba(127, 90, 240, 0.25);
   border-radius: 16px;
   padding: 12px;
+}
+
+.quick-bet-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.quick-bet-buttons .quick-btn {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.range-display {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  margin: 4px 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
 }
 
 @media (max-width: 900px) {
