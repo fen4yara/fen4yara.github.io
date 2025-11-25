@@ -945,7 +945,7 @@ app.get('/crash/history', (req, res) => {
   res.json(crashHistory);
 });
 
-// ======= Монетка =======
+// ======= Коинфлип =======
 app.get('/coinflip/history', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
@@ -1049,10 +1049,12 @@ app.post('/dice/play', (req, res) => {
 
   // Генерируем число от 0 до 999999
   const roll = Math.floor(Math.random() * 1000000);
-  // Исправляем расчет порога: при 1% threshold = 10000, при 99% threshold = 990000
+  // Расчет порога: при 1% threshold = 10000, при 99% threshold = 990000
   const threshold = Math.floor((percentNum / 100) * 1000000);
-  // Для "меньше": выигрыш если roll < threshold (0 до threshold-1)
-  // Для "больше": выигрыш если roll >= threshold (threshold до 999999)
+  // Для "меньше": выигрыш если roll < threshold (0 до threshold-1 включительно)
+  // Для "больше": выигрыш если roll >= threshold (threshold до 999999 включительно)
+  // При 1%: threshold = 10000, меньше = 0-9999, больше = 10000-999999 (99% шанс)
+  // При 99%: threshold = 990000, меньше = 0-989999 (99% шанс), больше = 990000-999999 (1% шанс)
   const win = side === 'less' ? roll < threshold : roll >= threshold;
   const multiplier = 100 / percentNum;
   const payout = win ? Math.floor(bet * multiplier) : 0;

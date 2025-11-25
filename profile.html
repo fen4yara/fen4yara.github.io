@@ -35,7 +35,7 @@
       <div class="history-tabs">
         <button class="tab-btn active" data-tab="crash">🚀 Краш</button>
         <button class="tab-btn" data-tab="roulette">🎯 Рулетка</button>
-        <button class="tab-btn" data-tab="coinflip">🪙 Монетка</button>
+        <button class="tab-btn" data-tab="coinflip">💰 Коинфлип</button>
         <button class="tab-btn" data-tab="dice">🎲 Дайс</button>
       </div>
       <div id="crashHistory" class="history-content active">
@@ -228,10 +228,10 @@
           });
         }
 
-        // Монетка
+        // Коинфлип
         coinflipHistoryList.innerHTML = '';
         if (!data.coinflip || !data.coinflip.length) {
-          coinflipHistoryList.innerHTML = '<div class="history-item muted">Нет игр в Монетку</div>';
+          coinflipHistoryList.innerHTML = '<div class="history-item muted">Нет игр в Коинфлип</div>';
         } else {
           data.coinflip.forEach((entry) => {
             const row = document.createElement('div');

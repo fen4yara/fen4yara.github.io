@@ -11,8 +11,8 @@
     <header class="glass-card top-bar">
       <div>
         <p class="eyebrow">Режим</p>
-        <h1>🎲 Neon Dice</h1>
-        <p class="muted">Выбери диапазон и процент, ставь на меньше или больше.</p>
+        <h1>🎲 Дайс</h1>
+        <p class="muted">Выбери процент и сторону, ставь на меньше или больше.</p>
       </div>
       <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
     </header>
@@ -104,9 +104,12 @@
         payoutEl.textContent = '0';
       }
 
-      const range1 = Math.floor((percent / 100) * 1000000);
-      rangeEl.textContent = `0 - ${range1 - 1}`;
-      rangeEl2.textContent = `${range1} - 999999`;
+      // Исправленный расчет диапазонов
+      const threshold = Math.floor((percent / 100) * 1000000);
+      // Для "меньше": 0 до threshold-1
+      // Для "больше": threshold до 999999
+      rangeEl.textContent = `0 - ${threshold - 1}`;
+      rangeEl2.textContent = `${threshold} - 999999`;
     }
 
     lessBtn.addEventListener('click', () => {

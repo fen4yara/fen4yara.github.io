@@ -157,14 +157,27 @@
       adminPanelSection.style.display = isAdmin ? '' : 'none';
     }
 
+    // Показываем секцию промокодов только после авторизации
+    async function initPromocodes() {
+      try {
+        const promocodes = await fetchPromocodes();
+        renderPromocodes(promocodes);
+        promocodesSection.style.display = '';
+      } catch (err) {
+        promocodesSection.style.display = 'none';
+      }
+    }
+
     async function init() {
       try {
         const users = await fetchUsers();
         renderUsers(users);
         togglePanels(true);
+        initPromocodes();
       } catch (err) {
         console.warn('Admin auth check failed:', err.message);
         togglePanels(false);
+        promocodesSection.style.display = 'none';
       }
     }
 
@@ -189,6 +202,7 @@
         const users = await fetchUsers();
         renderUsers(users);
         togglePanels(true);
+        initPromocodes();
       } catch (err) {
         adminLoginMessage.textContent = err.message;
         adminLoginMessage.className = 'message error';
@@ -452,9 +466,6 @@
       }
     });
 
-    // Показываем секцию промокодов при загрузке
-    promocodesSection.style.display = '';
-    fetchPromocodes().then(renderPromocodes).catch(() => {});
 
     logoutBtn.addEventListener('click', async () => {
       await fetch(`${BASE_URL}/admin/logout`, {
