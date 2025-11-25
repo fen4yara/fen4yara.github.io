@@ -55,6 +55,13 @@
     </section>
   </div>
 
+  <div id="historyModal" class="modal-overlay hidden">
+    <div class="modal-content glass-card">
+      <button id="historyModalClose" class="modal-close" aria-label="Закрыть">✕</button>
+      <div id="historyModalBody"></div>
+    </div>
+  </div>
+
 <script>
   const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
 
@@ -77,6 +84,9 @@
   const betInputEl = document.getElementById('bet');
   const playersContainer = document.getElementById('playersContainer');
   const historyList = document.getElementById('historyList');
+  const historyModal = document.getElementById('historyModal');
+  const historyModalClose = document.getElementById('historyModalClose');
+  const historyModalBody = document.getElementById('historyModalBody');
   const chartCanvas = document.getElementById('coefChart');
   const chartCtx = chartCanvas ? chartCanvas.getContext('2d') : null;
 
@@ -85,6 +95,7 @@
   let crashEnded = true;
   let hasBet = false;
   let hasCashedOut = false;
+  let cachedCrashHistory = [];
 
   window.addEventListener('DOMContentLoaded', async () => {
     resizeChart();
@@ -546,10 +557,11 @@
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Ошибка при загрузке истории');
 
+      cachedCrashHistory = data;
       historyList.innerHTML = '';
       data.forEach((round) => {
         const li = document.createElement('li');
-        li.className = 'history-item';
+        li.className = 'history-item clickable';
         const date = new Date(round.timestamp);
         const header = document.createElement('div');
         header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet}🍬`;
@@ -569,12 +581,48 @@
           subUl.append(subLi);
         });
         li.append(subUl);
+        li.addEventListener('click', () => openCrashHistoryModal(round));
         historyList.append(li);
       });
     } catch (err) {
       console.error(err);
     }
   }
+
+  function openCrashHistoryModal(round) {
+    if (!historyModal || !historyModalBody) return;
+    const date = new Date(round.timestamp).toLocaleString('ru-RU');
+    const playersList = (round.players || [])
+      .map((p) => {
+        const status = p.cashedOut
+          ? `забрал x${p.cashoutCoef?.toFixed(2) || '—'} → ${p.winnings}🍬`
+          : 'проиграл';
+        return `<li><strong>${p.username}</strong> — ставка ${p.bet}🍬, ${status}</li>`;
+      })
+      .join('');
+
+    historyModalBody.innerHTML = `
+      <p class="muted">${date}</p>
+      <h2>Краш x${round.crashPoint.toFixed(2)}</h2>
+      <p>Пул: ${round.totalBet} 🍬</p>
+      <ul class="history-players highlight">${playersList || '<li>Нет данных</li>'}</ul>
+    `;
+    historyModal.classList.remove('hidden');
+  }
+
+  function closeHistoryModal() {
+    if (historyModal) {
+      historyModal.classList.add('hidden');
+    }
+  }
+
+  historyModalClose?.addEventListener('click', closeHistoryModal);
+  historyModal?.addEventListener('click', (e) => {
+    if (e.target === historyModal) closeHistoryModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeHistoryModal();
+  });
 </script>
 </body>
 </html>

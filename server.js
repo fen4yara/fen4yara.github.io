@@ -9,6 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_LOGIN = '123456';
 const ADMIN_PASSWORD = '123456';
+const MAX_CRASH_HISTORY = 5;
+const MAX_ROULETTE_HISTORY = 10;
 
 // --------------- CORS ---------------
 const corsOptions = {
@@ -31,12 +33,37 @@ app.use(
 app.use(express.static(path.join(__dirname)));
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
+const historyFile = path.join(__dirname, 'data', 'history.json');
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
   if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '[]', 'utf-8');
 };
 ensureUsersFileExists();
+
+const ensureHistoryFileExists = () => {
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+  if (!fs.existsSync(historyFile)) {
+    const initial = { crashHistory: [], rouletteHistory: [] };
+    fs.writeFileSync(historyFile, JSON.stringify(initial, null, 2));
+  }
+};
+ensureHistoryFileExists();
+
+function readHistoryStore() {
+  try {
+    const raw = fs.readFileSync(historyFile, 'utf-8');
+    return JSON.parse(raw || '{}');
+  } catch (err) {
+    console.error('Ошибка чтения history.json:', err);
+    return { crashHistory: [], rouletteHistory: [] };
+  }
+}
+
+function writeHistoryStore(store) {
+  fs.writeFileSync(historyFile, JSON.stringify(store, null, 2));
+}
 
 function readUsers() {
   const data = fs.readFileSync(usersFile, 'utf-8');
@@ -209,7 +236,36 @@ app.patch('/admin/users/:username', requireAdmin, (req, res) => {
 let roulettePlayers = []; // текущая очередь: [{ username, bet, color }]
 let lastSpinPlayers = null; // «снимок» очереди перед спином
 let lastSpinResult = null; // { winner, totalBet, timestamp, players: lastSpinPlayers }
-let rouletteHistory = []; // последние N спинов
+let rouletteHistory = [];
+let crashHistory = [];
+let lastCrashResult = null;
+
+(() => {
+  const store = readHistoryStore();
+  let needsPersist = false;
+  const rawRoulette = Array.isArray(store.rouletteHistory) ? store.rouletteHistory : [];
+  const rawCrash = Array.isArray(store.crashHistory) ? store.crashHistory : [];
+  rouletteHistory = rawRoulette.slice(0, MAX_ROULETTE_HISTORY);
+  crashHistory = rawCrash.slice(0, MAX_CRASH_HISTORY);
+  needsPersist = needsPersist || rawRoulette.length !== rouletteHistory.length || rawCrash.length !== crashHistory.length;
+  if (rouletteHistory.length) {
+    lastSpinResult = rouletteHistory[0];
+  }
+  if (crashHistory.length) {
+    lastCrashResult = crashHistory[0];
+  }
+  if (needsPersist) {
+    writeHistoryStore({ crashHistory, rouletteHistory });
+  }
+})();
+
+function persistHistory() {
+  writeHistoryStore({
+    crashHistory,
+    rouletteHistory
+  });
+}
+
 const spinInterval = 20000; // 20 сек
 
 let nextSpin = null; // временная метка (ms) следующего запланированного спина
@@ -265,7 +321,8 @@ function runSpin() {
       winningTicket
     };
     rouletteHistory.unshift(lastSpinResult);
-    if (rouletteHistory.length > 10) rouletteHistory.pop();
+    if (rouletteHistory.length > MAX_ROULETTE_HISTORY) rouletteHistory.pop();
+    persistHistory();
 
     roulettePlayers = [];
   }
@@ -385,11 +442,6 @@ let currentCrash = {
   timerId: null       // setTimeout ID, чтобы можно было clearTimeout
 };
 
-let crashHistory = [];
-let lastCrashResult = null;// последние 5 раундов: 
-// { timestamp, crashPoint, totalBet, players: [ { username, bet, cashedOut, cashoutCoef, winnings, color } ] }
-
-
 function getRandomColor() {
   const letters = '0123456789ABCDEF';
   let color = '#';
@@ -443,9 +495,10 @@ function endCrashRound() {
   };
 
   crashHistory.unshift(result);
-  if (crashHistory.length > 5) crashHistory.pop();
+  if (crashHistory.length > MAX_CRASH_HISTORY) crashHistory.pop();
 
   lastCrashResult = result; // сохраняем, чтобы /crash/state мог вернуть результат
+  persistHistory();
 
   clearTimeout(currentCrash.timerId);
   currentCrash = {

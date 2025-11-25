@@ -53,6 +53,13 @@
     </section>
   </div>
 
+  <div id="rouletteModal" class="modal-overlay hidden">
+    <div class="modal-content glass-card">
+      <button id="rouletteModalClose" class="modal-close" aria-label="Закрыть">✕</button>
+      <div id="rouletteModalBody"></div>
+    </div>
+  </div>
+
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production-9286.up.railway.app';
     let user = null;
@@ -60,6 +67,7 @@
     let isAnimating = false;
     let nextSpinTimestamp = null;
     let countdownInterval = null;
+    let rouletteHistoryCache = [];
 
     const balanceEl = document.getElementById('balance');
     const messageEl = document.getElementById('message');
@@ -70,6 +78,10 @@
     const timerEl = document.getElementById('timer');
     const legendEl = document.getElementById('legend');
     const historyEl = document.getElementById('rouletteHistory');
+    const detailModal = document.getElementById('rouletteModal');
+    const detailModalBody = document.getElementById('rouletteModalBody');
+    const detailModalClose = document.getElementById('rouletteModalClose');
+    const COLOR_FALLBACKS = ['#ff5f9e', '#7f5af0', '#34d399', '#facc15', '#38bdf8', '#fb7185'];
 
     // Плавность анимации
     function easeOut(t) {
@@ -107,7 +119,11 @@
       if (clear) ctx.clearRect(0, 0, 300, 300);
       const center = 150;
       const radius = 130;
-      const segments = list.length ? list : placeholderSegments();
+      const baseSegments = list.length ? list : placeholderSegments();
+      const segments = baseSegments.map((segment, idx) => ({
+        ...segment,
+        color: segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length]
+      }));
       const totalBet = segments.reduce((s, p) => s + (p.bet || 1), 0) || 1;
 
       // base glow
@@ -163,7 +179,7 @@
       ctx.fillStyle = hubGradient;
       ctx.fill();
 
-      renderLegend(list);
+      renderLegend(segments);
     }
 
     // Рисуем легенду
@@ -177,7 +193,7 @@
         return;
       }
 
-      list.forEach(p => {
+      list.forEach((p, idx) => {
         const item = document.createElement('div');
         item.className = 'legend-item';
         const left = document.createElement('div');
@@ -186,7 +202,7 @@
         left.style.gap = '10px';
         const colorBox = document.createElement('div');
         colorBox.className = 'legend-color';
-        colorBox.style.backgroundColor = p.color;
+        colorBox.style.backgroundColor = p.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length];
         const name = document.createElement('div');
         name.textContent = p.username;
         left.appendChild(colorBox);
@@ -203,17 +219,18 @@
 
     function renderHistory(history) {
       if (!historyEl) return;
+      rouletteHistoryCache = history || [];
       historyEl.innerHTML = '';
-      if (!history || !history.length) {
+      if (!rouletteHistoryCache.length) {
         const empty = document.createElement('div');
         empty.className = 'history-item muted';
         empty.textContent = 'История появится после завершения первого спина';
         historyEl.appendChild(empty);
         return;
       }
-      history.forEach((round) => {
+      rouletteHistoryCache.forEach((round) => {
         const card = document.createElement('div');
-        card.className = 'history-item';
+        card.className = 'history-item clickable';
         const date = new Date(round.timestamp);
         const header = document.createElement('div');
         header.innerHTML = `<strong>${date.toLocaleTimeString('ru-RU')}</strong> — ${round.winner}`;
@@ -225,9 +242,41 @@
         body.textContent = `Банк: ${round.totalBet} 🍬${ticketInfo}`;
         card.appendChild(header);
         card.appendChild(body);
+        card.addEventListener('click', () => openRouletteHistoryModal(round));
         historyEl.appendChild(card);
       });
     }
+
+    function openRouletteHistoryModal(round) {
+      if (!detailModal || !detailModalBody) return;
+      const date = new Date(round.timestamp).toLocaleString('ru-RU');
+      const ticketInfo = typeof round.winningTicket === 'number'
+        ? round.winningTicket.toFixed(2)
+        : '—';
+      const playersList = (round.players || [])
+        .map((p) => `<li><strong>${p.username}</strong> — ставка ${p.bet} 🍬</li>`)
+        .join('');
+
+      detailModalBody.innerHTML = `
+        <p class="muted">${date}</p>
+        <h2>Победитель: ${round.winner}</h2>
+        <p>Банк: ${round.totalBet} 🍬 · Билет: ${ticketInfo}</p>
+        <ul class="history-players highlight">${playersList || '<li>Нет данных</li>'}</ul>
+      `;
+      detailModal.classList.remove('hidden');
+    }
+
+    function closeRouletteHistoryModal() {
+      detailModal?.classList.add('hidden');
+    }
+
+    detailModalClose?.addEventListener('click', closeRouletteHistoryModal);
+    detailModal?.addEventListener('click', (e) => {
+      if (e.target === detailModal) closeRouletteHistoryModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeRouletteHistoryModal();
+    });
 
     // 1) Получаем игроков + nextSpin + serverTime (каждые 500 мс)
     async function fetchPlayersAndDraw() {
