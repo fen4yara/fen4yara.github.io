@@ -219,9 +219,14 @@ function createYooMoneyPayment(amount, label, returnUrl) {
       return;
     }
 
-    // Создаем простую ссылку на форму перевода YooMoney
-    // Пользователь перейдет на страницу перевода с предзаполненными данными
-    const paymentUrl = `https://yoomoney.ru/quickpay/confirm?receiver=${YOOMONEY_RECEIVER}&sum=${amount}&label=${encodeURIComponent(label)}&quickpay-form=button&paymentType=AC`;
+    // Создаем ссылку на форму quickpay YooMoney
+    // Согласно документации YooMoney, quickpay форма принимает параметры:
+    // receiver - номер кошелька получателя
+    // sum - сумма платежа
+    // label - комментарий к платежу (обязательно для идентификации)
+    // quickpay-form - тип формы (button, small, donate)
+    // paymentType - тип платежа (AC - с карты, PC - из кошелька)
+    const paymentUrl = `https://yoomoney.ru/quickpay/confirm?receiver=${YOOMONEY_RECEIVER}&quickpay-form=button&sum=${amount}&label=${encodeURIComponent(label)}&paymentType-choice=on&successURL=${encodeURIComponent(returnUrl)}`;
     
     // Возвращаем URL для перехода
     resolve({
@@ -624,11 +629,76 @@ app.post('/profile/yoomoney/webhook', express.urlencoded({ extended: true }), (r
   res.status(200).send('OK');
 });
 
+// Функция для парсинга XML ответа от YooMoney API
+// Парсим XML вручную через регулярные выражения
+function parseYooMoneyXML(xmlString) {
+  const operations = [];
+  
+  // Находим все теги <operation>
+  const operationMatches = xmlString.match(/<operation[^>]*>[\s\S]*?<\/operation>/gi);
+  
+  if (operationMatches) {
+    for (const opMatch of operationMatches) {
+      const operation = {};
+      
+      // Извлекаем атрибуты и значения
+      const labelMatch = opMatch.match(/label=["']([^"']+)["']/i);
+      const amountMatch = opMatch.match(/amount=["']([^"']+)["']/i);
+      const operationIdMatch = opMatch.match(/operation_id=["']([^"']+)["']/i);
+      const datetimeMatch = opMatch.match(/datetime=["']([^"']+)["']/i);
+      const directionMatch = opMatch.match(/direction=["']([^"']+)["']/i);
+      
+      if (labelMatch) {
+        operation.label = labelMatch[1];
+      }
+      if (amountMatch) {
+        operation.amount = amountMatch[1];
+      }
+      if (operationIdMatch) {
+        operation.operation_id = operationIdMatch[1];
+      }
+      if (datetimeMatch) {
+        operation.datetime = datetimeMatch[1];
+      }
+      if (directionMatch) {
+        operation.direction = directionMatch[1];
+      }
+      
+      // Извлекаем значения из тегов
+      const labelTagMatch = opMatch.match(/<label[^>]*>([^<]+)<\/label>/i);
+      const amountTagMatch = opMatch.match(/<amount[^>]*>([^<]+)<\/amount>/i);
+      const operationIdTagMatch = opMatch.match(/<operation_id[^>]*>([^<]+)<\/operation_id>/i);
+      
+      if (labelTagMatch && !operation.label) {
+        operation.label = labelTagMatch[1].trim();
+      }
+      if (amountTagMatch && !operation.amount) {
+        operation.amount = amountTagMatch[1].trim();
+      }
+      if (operationIdTagMatch && !operation.operation_id) {
+        operation.operation_id = operationIdTagMatch[1].trim();
+      }
+      
+      if (operation.label) {
+        operations.push(operation);
+      }
+    }
+  }
+  
+  return {
+    operations: {
+      operation: operations
+    }
+  };
+}
+
 // Функция для проверки входящих платежей через API YooMoney
-// Проверяет operation-history и автоматически пополняет баланс
+// Согласно документации: https://yoomoney.ru/docs/wallet
+// API возвращает XML формат
 async function checkYooMoneyIncomingPayments() {
   try {
     // Получаем список входящих платежей через operation-history API
+    // Согласно документации, запрос должен быть в формате form-urlencoded
     const postData = querystring.stringify({
       type: 'deposition',
       records: '10' // Проверяем последние 10 операций
@@ -645,22 +715,17 @@ async function checkYooMoneyIncomingPayments() {
       }
     };
 
-    const apiResponse = await new Promise((resolve, reject) => {
+    const xmlResponse = await new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         let data = '';
         res.on('data', (chunk) => {
           data += chunk;
         });
         res.on('end', () => {
-          try {
-            // YooMoney API может возвращать XML или form-urlencoded
-            // Пытаемся распарсить как form-urlencoded
-            const response = querystring.parse(data);
-            resolve(response);
-          } catch (err) {
-            // Если не получилось, возвращаем сырые данные для дальнейшей обработки
-            console.log('Ответ API не в формате form-urlencoded, пытаемся другой формат');
-            resolve({ raw: data });
+          if (res.statusCode !== 200) {
+            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          } else {
+            resolve(data);
           }
         });
       });
@@ -670,92 +735,90 @@ async function checkYooMoneyIncomingPayments() {
       req.end();
     });
 
+    // Парсим XML ответ
+    let parsedResponse;
+    try {
+      parsedResponse = parseYooMoneyXML(xmlResponse);
+      console.log(`Успешно распарсено XML, найдено операций: ${parsedResponse.operations?.operation?.length || 0}`);
+    } catch (parseError) {
+      console.error('Ошибка парсинга XML ответа:', parseError);
+      console.log('Первые 500 символов ответа:', xmlResponse.substring(0, 500));
+      parsedResponse = { operations: { operation: [] } };
+    }
+
     // Обрабатываем найденные платежи
     const payments = readYooMoneyPayments();
     const pendingPayments = payments.filter(p => p.status === 'pending');
     let processedCount = 0;
 
-    // Если API вернул операции, проверяем их по label
-    // API может вернуть операции в разных форматах, обрабатываем оба
+    // Извлекаем операции из XML ответа
     let operations = [];
-    
-    // Проверяем разные форматы ответа
-    if (apiResponse.operations) {
-      if (Array.isArray(apiResponse.operations)) {
-        operations = apiResponse.operations;
-      } else if (typeof apiResponse.operations === 'object') {
-        operations = [apiResponse.operations];
-      }
-    } else if (apiResponse.raw) {
-      // Если ответ в виде строки (XML или другой формат)
-      const rawData = apiResponse.raw.toString();
-      // Пытаемся найти label в ответе
-      const labelMatches = rawData.match(/label[>=]["']([^"']+)["']/gi);
-      if (labelMatches) {
-        // Если нашли label, пытаемся извлечь информацию об операциях
-        console.log('Найдены label в ответе API:', labelMatches.length);
+    if (parsedResponse && parsedResponse.operations) {
+      if (parsedResponse.operations.operation) {
+        if (Array.isArray(parsedResponse.operations.operation)) {
+          operations = parsedResponse.operations.operation;
+        } else {
+          operations = [parsedResponse.operations.operation];
+        }
       }
     }
 
-    // Альтернативный способ: проверяем платежи по сумме и времени
-    // Если платеж был создан недавно (в последние 10 минут), проверяем все входящие операции
-    const now = Date.now();
-    const recentPayments = pendingPayments.filter(p => {
-      const timeDiff = now - p.createdAt;
-      return timeDiff < 10 * 60 * 1000; // Последние 10 минут
-    });
+    console.log(`Получено ${operations.length} операций из API YooMoney`);
 
-    console.log(`Проверяем ${recentPayments.length} ожидающих платежей из ${pendingPayments.length} всего`);
-
-    // Если не нашли операции через API, используем альтернативный метод
-    // Проверяем платежи по сумме и времени создания
-    if (operations.length === 0 && recentPayments.length > 0) {
-      console.log('Используем альтернативный метод проверки платежей');
-      // В этом случае полагаемся на webhook или ручную проверку
-      // Но можем попробовать найти платежи по сумме
-    }
-
+    // Проверяем каждую операцию на соответствие ожидающим платежам
     for (const operation of operations) {
-      if (operation && operation.label) {
-        const payment = pendingPayments.find(p => {
-          // Проверяем точное совпадение label или частичное (на случай изменений формата)
-          return p.label === operation.label || 
-                 (typeof operation.label === 'string' && operation.label.includes(p.paymentId)) ||
-                 (typeof p.label === 'string' && p.label.includes(operation.label));
-        });
-        
-        if (payment && !payment.operationId) {
-          // Найден платеж, пополняем баланс
-          const paymentIndex = payments.findIndex(p => p.paymentId === payment.paymentId);
-          if (paymentIndex !== -1) {
-            payments[paymentIndex].status = 'success';
-            payments[paymentIndex].operationId = operation.operation_id || operation.operationId || 'unknown';
-            payments[paymentIndex].completedAt = Date.now();
-            writeYooMoneyPayments(payments);
+      if (!operation || !operation.label) continue;
 
-            const user = findUser(payment.username);
-            if (user) {
-              const updatedBalance = user.balance + payment.amount;
-              updateUserBalance(payment.username, updatedBalance);
+      const operationLabel = String(operation.label).trim();
+      
+      // Ищем платеж по label (точное совпадение или частичное)
+      const payment = pendingPayments.find(p => {
+        const paymentLabel = String(p.label).trim();
+        return paymentLabel === operationLabel || 
+               operationLabel.includes(p.paymentId) ||
+               paymentLabel.includes(operationLabel);
+      });
+      
+      if (payment && !payment.operationId) {
+        // Найден платеж, пополняем баланс
+        const paymentIndex = payments.findIndex(p => p.paymentId === payment.paymentId);
+        if (paymentIndex !== -1) {
+          payments[paymentIndex].status = 'success';
+          payments[paymentIndex].operationId = operation.operation_id || operation.operationId || 'unknown';
+          payments[paymentIndex].completedAt = Date.now();
+          writeYooMoneyPayments(payments);
 
-              // Добавляем в историю депозитов
-              const allDeposits = readDeposits();
-              allDeposits.push({
-                username: payment.username,
-                amount: payment.amount,
-                timestamp: Date.now(),
-                method: 'yoomoney',
-                paymentId: payment.paymentId
-              });
-              if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
-                allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
-              }
-              writeDeposits(allDeposits);
-              processedCount++;
-              console.log(`✅ Платеж ${payment.paymentId} обработан, баланс пользователя ${payment.username} пополнен на ${payment.amount} руб.`);
+          const user = findUser(payment.username);
+          if (user) {
+            const updatedBalance = user.balance + payment.amount;
+            updateUserBalance(payment.username, updatedBalance);
+
+            // Добавляем в историю депозитов
+            const allDeposits = readDeposits();
+            allDeposits.push({
+              username: payment.username,
+              amount: payment.amount,
+              timestamp: Date.now(),
+              method: 'yoomoney',
+              paymentId: payment.paymentId
+            });
+            if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
+              allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
             }
+            writeDeposits(allDeposits);
+            processedCount++;
+            console.log(`✅ Платеж ${payment.paymentId} обработан, баланс пользователя ${payment.username} пополнен на ${payment.amount} руб.`);
           }
         }
+      }
+    }
+
+    // Если не нашли платежи через API, логируем для отладки
+    if (processedCount === 0 && pendingPayments.length > 0) {
+      console.log(`Не найдено совпадений для ${pendingPayments.length} ожидающих платежей`);
+      if (operations.length > 0) {
+        console.log('Примеры label из API:', operations.slice(0, 3).map(op => op.label));
+        console.log('Примеры label ожидающих платежей:', pendingPayments.slice(0, 3).map(p => p.label));
       }
     }
 
