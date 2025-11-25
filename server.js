@@ -11,6 +11,9 @@ const ADMIN_LOGIN = '123456';
 const ADMIN_PASSWORD = '123456';
 const MAX_CRASH_HISTORY = 5;
 const MAX_ROULETTE_HISTORY = 10;
+const MAX_DEPOSITS_FILE_RECORDS = 1000;
+const MAX_DEPOSIT_HISTORY = 20;
+const DEPOSIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 час между пополнениями
 
 // --------------- CORS ---------------
 const corsOptions = {
@@ -80,6 +83,21 @@ function readDeposits() {
 
 function writeDeposits(arr) {
   fs.writeFileSync(depositsFile, JSON.stringify(arr, null, 2));
+}
+
+function getUserDepositsMeta(username) {
+  const allDeposits = readDeposits();
+  const userDeposits = allDeposits
+    .filter((entry) => entry.username === username)
+    .sort((a, b) => b.timestamp - a.timestamp);
+  const nextDepositAt = userDeposits.length
+    ? userDeposits[0].timestamp + DEPOSIT_COOLDOWN_MS
+    : null;
+  return {
+    allDeposits,
+    userDeposits: userDeposits.slice(0, MAX_DEPOSIT_HISTORY),
+    nextDepositAt
+  };
 }
 
 function readHistoryStore() {
@@ -301,7 +319,90 @@ app.get('/admin/download/history.json', requireAdmin, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="history.json"');
   res.sendFile(historyFile);
 });
+
+app.get('/admin/download/deposits.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="deposits.json"');
+  res.sendFile(depositsFile);
+});
 // ======= конец админки =======
+
+// ======= профиль пользователя =======
+app.get('/profile/deposit-status', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const { nextDepositAt } = getUserDepositsMeta(req.session.user.username);
+  const cooldownActive = nextDepositAt && nextDepositAt > Date.now() ? nextDepositAt : null;
+  res.json({ nextDepositAt: cooldownActive });
+});
+
+app.post('/profile/deposit', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const amount = Number(req.body.amount);
+  if (!Number.isFinite(amount) || amount < 1 || amount > 1000) {
+    return res.status(400).json({ error: 'Сумма должна быть от 1 до 1000' });
+  }
+
+  const username = req.session.user.username;
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
+  }
+
+  const { allDeposits, nextDepositAt } = getUserDepositsMeta(username);
+  const now = Date.now();
+  if (nextDepositAt && nextDepositAt > now) {
+    return res.status(429).json({
+      error: 'Пополнение доступно раз в час',
+      nextDepositAt
+    });
+  }
+
+  const updatedBalance = user.balance + amount;
+  updateUserBalance(username, updatedBalance);
+
+  const depositEntry = { username, amount, timestamp: now };
+  const updatedDeposits = [...allDeposits, depositEntry];
+  if (updatedDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
+    updatedDeposits.splice(0, updatedDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
+  }
+  writeDeposits(updatedDeposits);
+
+  const metaAfterSave = getUserDepositsMeta(username);
+
+  res.json({
+    message: `Баланс пополнен на ${amount}`,
+    newBalance: updatedBalance,
+    nextDepositAt: metaAfterSave.nextDepositAt,
+    deposits: metaAfterSave.userDeposits
+  });
+});
+
+app.get('/profile/history', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const userCrash = crashHistory.filter(
+    (round) => Array.isArray(round.players) && round.players.some((p) => p.username === username)
+  );
+  const userRoulette = rouletteHistory.filter(
+    (round) => Array.isArray(round.players) && round.players.some((p) => p.username === username)
+  );
+  const { userDeposits } = getUserDepositsMeta(username);
+  res.json({
+    crash: userCrash,
+    roulette: userRoulette,
+    deposits: userDeposits
+  });
+});
+// ======= конец профиля =======
 
 let roulettePlayers = []; // текущая очередь: [{ username, bet, color }]
 let lastSpinPlayers = null; // «снимок» очереди перед спином

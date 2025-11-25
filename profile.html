@@ -43,6 +43,11 @@
         <div class="history-list" id="rouletteHistoryList"></div>
       </div>
     </section>
+
+    <section class="glass-card">
+      <p class="eyebrow">История депозитов</p>
+      <div class="history-list" id="depositHistoryList"></div>
+    </section>
   </div>
 
   <div id="depositModal" class="modal-overlay hidden">
@@ -73,6 +78,7 @@
     const depositMessage = document.getElementById('depositMessage');
     const crashHistoryList = document.getElementById('crashHistoryList');
     const rouletteHistoryList = document.getElementById('rouletteHistoryList');
+    const depositHistoryList = document.getElementById('depositHistoryList');
 
     async function checkAuth() {
       try {
@@ -199,6 +205,20 @@
             rouletteHistoryList.appendChild(card);
           });
         }
+
+        // История депозитов
+        depositHistoryList.innerHTML = '';
+        if (!data.deposits || !data.deposits.length) {
+          depositHistoryList.innerHTML = '<div class="history-item muted">Пополнений ещё не было</div>';
+        } else {
+          data.deposits.forEach((entry) => {
+            const row = document.createElement('div');
+            row.className = 'history-item';
+            const date = new Date(entry.timestamp);
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — +${entry.amount}🍬`;
+            depositHistoryList.appendChild(row);
+          });
+        }
       } catch (err) {
         console.error('History load error:', err);
       }
@@ -288,6 +308,7 @@
         user.balance = data.newBalance;
         balanceEl.textContent = user.balance;
         await loadDepositStatus();
+        await loadHistory();
         setTimeout(() => {
           depositModal.classList.add('hidden');
         }, 1500);
