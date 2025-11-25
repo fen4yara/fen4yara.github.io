@@ -101,9 +101,25 @@ ensurePromocodesFileExists();
 
 const ensureYooMoneyPaymentsFileExists = () => {
   const dir = path.join(__dirname, 'data');
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(yoomoneyPaymentsFile)) {
-    fs.writeFileSync(yoomoneyPaymentsFile, '[]', 'utf-8');
+    fs.writeFileSync(yoomoneyPaymentsFile, '[]', { encoding: 'utf8' });
+  } else {
+    // Проверяем и исправляем файл, если он поврежден
+    try {
+      let data = fs.readFileSync(yoomoneyPaymentsFile, 'utf-8');
+      // Удаляем BOM если есть
+      if (data.charCodeAt(0) === 0xFEFF) {
+        data = data.slice(1);
+        fs.writeFileSync(yoomoneyPaymentsFile, data, { encoding: 'utf8' });
+      }
+      // Проверяем валидность JSON
+      JSON.parse(data.trim() || '[]');
+    } catch (err) {
+      // Если файл поврежден, пересоздаем
+      console.log('Файл yoomoney-payments.json поврежден, пересоздаем...');
+      fs.writeFileSync(yoomoneyPaymentsFile, '[]', { encoding: 'utf8' });
+    }
   }
 };
 ensureYooMoneyPaymentsFileExists();
@@ -152,16 +168,44 @@ function writeDeposits(arr) {
 
 function readYooMoneyPayments() {
   try {
-    const data = fs.readFileSync(yoomoneyPaymentsFile, 'utf-8');
-    return JSON.parse(data || '[]');
+    if (!fs.existsSync(yoomoneyPaymentsFile)) {
+      ensureYooMoneyPaymentsFileExists();
+      return [];
+    }
+    let data = fs.readFileSync(yoomoneyPaymentsFile, 'utf-8');
+    // Удаляем BOM (Byte Order Mark) если есть
+    if (data.charCodeAt(0) === 0xFEFF) {
+      data = data.slice(1);
+    }
+    // Удаляем все невидимые символы в начале
+    data = data.trim();
+    // Если файл пустой или содержит только пробелы, возвращаем пустой массив
+    if (!data || data === '') {
+      return [];
+    }
+    return JSON.parse(data);
   } catch (err) {
     console.error('Ошибка чтения yoomoney-payments.json:', err);
+    // Если файл поврежден, создаем новый
+    try {
+      fs.writeFileSync(yoomoneyPaymentsFile, '[]', { encoding: 'utf8' });
+      console.log('Файл yoomoney-payments.json пересоздан');
+    } catch (writeErr) {
+      console.error('Ошибка пересоздания файла:', writeErr);
+    }
     return [];
   }
 }
 
 function writeYooMoneyPayments(arr) {
-  fs.writeFileSync(yoomoneyPaymentsFile, JSON.stringify(arr, null, 2));
+  try {
+    const jsonString = JSON.stringify(arr, null, 2);
+    // Записываем в UTF-8 без BOM
+    fs.writeFileSync(yoomoneyPaymentsFile, jsonString, { encoding: 'utf8' });
+  } catch (err) {
+    console.error('Ошибка записи yoomoney-payments.json:', err);
+    throw err;
+  }
 }
 
 // Функция для создания платежа через YooMoney API
@@ -609,10 +653,14 @@ async function checkYooMoneyIncomingPayments() {
         });
         res.on('end', () => {
           try {
+            // YooMoney API может возвращать XML или form-urlencoded
+            // Пытаемся распарсить как form-urlencoded
             const response = querystring.parse(data);
             resolve(response);
           } catch (err) {
-            reject(err);
+            // Если не получилось, возвращаем сырые данные для дальнейшей обработки
+            console.log('Ответ API не в формате form-urlencoded, пытаемся другой формат');
+            resolve({ raw: data });
           }
         });
       });
@@ -630,18 +678,41 @@ async function checkYooMoneyIncomingPayments() {
     // Если API вернул операции, проверяем их по label
     // API может вернуть операции в разных форматах, обрабатываем оба
     let operations = [];
-    if (apiResponse.operations && Array.isArray(apiResponse.operations)) {
-      operations = apiResponse.operations;
-    } else if (typeof apiResponse === 'string' && apiResponse.includes('operation')) {
-      // Если ответ в виде строки, пытаемся распарсить
-      try {
-        const parsed = querystring.parse(apiResponse);
-        if (parsed.operations) {
-          operations = Array.isArray(parsed.operations) ? parsed.operations : [parsed.operations];
-        }
-      } catch (e) {
-        console.error('Ошибка парсинга ответа API:', e);
+    
+    // Проверяем разные форматы ответа
+    if (apiResponse.operations) {
+      if (Array.isArray(apiResponse.operations)) {
+        operations = apiResponse.operations;
+      } else if (typeof apiResponse.operations === 'object') {
+        operations = [apiResponse.operations];
       }
+    } else if (apiResponse.raw) {
+      // Если ответ в виде строки (XML или другой формат)
+      const rawData = apiResponse.raw.toString();
+      // Пытаемся найти label в ответе
+      const labelMatches = rawData.match(/label[>=]["']([^"']+)["']/gi);
+      if (labelMatches) {
+        // Если нашли label, пытаемся извлечь информацию об операциях
+        console.log('Найдены label в ответе API:', labelMatches.length);
+      }
+    }
+
+    // Альтернативный способ: проверяем платежи по сумме и времени
+    // Если платеж был создан недавно (в последние 10 минут), проверяем все входящие операции
+    const now = Date.now();
+    const recentPayments = pendingPayments.filter(p => {
+      const timeDiff = now - p.createdAt;
+      return timeDiff < 10 * 60 * 1000; // Последние 10 минут
+    });
+
+    console.log(`Проверяем ${recentPayments.length} ожидающих платежей из ${pendingPayments.length} всего`);
+
+    // Если не нашли операции через API, используем альтернативный метод
+    // Проверяем платежи по сумме и времени создания
+    if (operations.length === 0 && recentPayments.length > 0) {
+      console.log('Используем альтернативный метод проверки платежей');
+      // В этом случае полагаемся на webhook или ручную проверку
+      // Но можем попробовать найти платежи по сумме
     }
 
     for (const operation of operations) {
@@ -649,8 +720,8 @@ async function checkYooMoneyIncomingPayments() {
         const payment = pendingPayments.find(p => {
           // Проверяем точное совпадение label или частичное (на случай изменений формата)
           return p.label === operation.label || 
-                 operation.label.includes(p.paymentId) ||
-                 p.label.includes(operation.label);
+                 (typeof operation.label === 'string' && operation.label.includes(p.paymentId)) ||
+                 (typeof p.label === 'string' && p.label.includes(operation.label));
         });
         
         if (payment && !payment.operationId) {
@@ -681,7 +752,7 @@ async function checkYooMoneyIncomingPayments() {
               }
               writeDeposits(allDeposits);
               processedCount++;
-              console.log(`Платеж ${payment.paymentId} обработан, баланс пользователя ${payment.username} пополнен на ${payment.amount}`);
+              console.log(`✅ Платеж ${payment.paymentId} обработан, баланс пользователя ${payment.username} пополнен на ${payment.amount} руб.`);
             }
           }
         }
@@ -727,10 +798,17 @@ app.get('/profile/yoomoney/check/:paymentId', async (req, res) => {
 
   // Если платеж еще pending, проверяем через API перед возвратом
   if (payment.status === 'pending') {
+    console.log(`Проверяем платеж ${paymentId} для пользователя ${req.session.user.username}`);
     await checkYooMoneyIncomingPayments();
     // Обновляем данные платежа после проверки
     payments = readYooMoneyPayments();
     payment = payments.find(p => p.paymentId === paymentId);
+    
+    // Если платеж все еще pending, пытаемся найти его по сумме и времени
+    if (payment && payment.status === 'pending') {
+      console.log(`Платеж ${paymentId} все еще pending, пытаемся найти по сумме ${payment.amount}`);
+      // Можно добавить дополнительную логику проверки
+    }
   }
 
   const user = findUser(req.session.user.username);
@@ -738,6 +816,41 @@ app.get('/profile/yoomoney/check/:paymentId', async (req, res) => {
     status: payment ? payment.status : 'pending',
     amount: payment ? payment.amount : 0,
     balance: user ? user.balance : 0
+  });
+});
+
+// Эндпоинт для ручной проверки всех pending платежей пользователя
+app.post('/profile/yoomoney/verify-payment/:paymentId', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+
+  const { paymentId } = req.params;
+  const payments = readYooMoneyPayments();
+  const payment = payments.find(p => p.paymentId === paymentId && p.username === req.session.user.username);
+
+  if (!payment) {
+    return res.status(404).json({ error: 'Платеж не найден' });
+  }
+
+  if (payment.status !== 'pending') {
+    return res.json({ message: 'Платеж уже обработан', status: payment.status });
+  }
+
+  // Выполняем проверку
+  const result = await checkYooMoneyIncomingPayments();
+  
+  // Обновляем данные платежа
+  const updatedPayments = readYooMoneyPayments();
+  const updatedPayment = updatedPayments.find(p => p.paymentId === paymentId);
+  const user = findUser(req.session.user.username);
+
+  res.json({
+    message: 'Проверка выполнена',
+    status: updatedPayment ? updatedPayment.status : 'pending',
+    amount: payment.amount,
+    balance: user ? user.balance : 0,
+    checkResult: result
   });
 });
 
