@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">Панель управления</p>
         <h1>Админ меню</h1>
-        <p class="muted">Войдите с общим паролем 123456/123456, чтобы посмотреть пользователей и оперативно менять баланс.</p>
+        <p class="muted">Управление пользователями, балансами и блокировками.</p>
       </div>
       <div class="link-row">
         <a href="index.html" class="muted">← вернуться на сайт</a>
@@ -25,8 +25,8 @@
         <p class="muted">Данные логина не связаны с обычными аккаунтами.</p>
       </div>
       <form id="adminLoginForm" class="form-grid">
-        <input type="text" id="adminLogin" class="input-field" placeholder="Логин (123456)" required />
-        <input type="password" id="adminPassword" class="input-field" placeholder="Пароль (123456)" required />
+        <input type="text" id="adminLogin" class="input-field" placeholder="Логин" required />
+        <input type="password" id="adminPassword" class="input-field" placeholder="Пароль" required />
         <button type="submit" class="btn-primary">Войти в панель</button>
       </form>
       <p id="adminLoginMessage" class="message"></p>
@@ -39,6 +39,8 @@
           <p class="muted">Изменяйте баланс в пару кликов. Все изменения пишутся напрямую в users.json.</p>
         </div>
         <div class="admin-actions">
+          <button id="downloadUsersBtn" class="btn-secondary" style="width:auto">📥 users.json</button>
+          <button id="downloadHistoryBtn" class="btn-secondary" style="width:auto">📥 history.json</button>
           <button id="refreshBtn" class="btn-secondary" style="width:auto">Обновить список</button>
           <button id="adminLogoutBtn" class="btn-outline" style="width:auto">Выйти</button>
         </div>
@@ -54,6 +56,7 @@
             <tr>
               <th>Пользователь</th>
               <th>Текущий баланс</th>
+              <th>Статус</th>
               <th>Новый баланс</th>
               <th>Действие</th>
             </tr>
@@ -86,13 +89,19 @@
 
     function renderUsers(users) {
       usersTable.innerHTML = '';
-      users.forEach(({ username, balance }) => {
+      users.forEach(({ username, balance, banned }) => {
         const tr = document.createElement('tr');
+        const isBanned = banned === true;
         tr.innerHTML = `
           <td>${username}</td>
           <td>${balance} 🍬</td>
+          <td>
+            <button class="btn-${isBanned ? 'primary' : 'outline'}" data-username="${username}" data-action="toggle-ban" style="width:auto; font-size:0.85rem">
+              ${isBanned ? '🔓 Разблокировать' : '🔒 Заблокировать'}
+            </button>
+          </td>
           <td><input type="number" min="0" class="input-field" value="${balance}" data-username="${username}" /></td>
-          <td><button class="btn-primary" data-username="${username}">Сохранить</button></td>
+          <td><button class="btn-primary" data-username="${username}" data-action="save-balance">Сохранить</button></td>
         `;
         usersTable.appendChild(tr);
       });
@@ -157,28 +166,90 @@
     usersTable.addEventListener('click', async (e) => {
       if (e.target.tagName !== 'BUTTON') return;
       const username = e.target.getAttribute('data-username');
-      const input = usersTable.querySelector(`input[data-username="${username}"]`);
-      const balanceValue = Number(input.value);
-      if (!Number.isFinite(balanceValue) || balanceValue < 0) {
-        adminPanelMessage.textContent = 'Введите корректный баланс.';
-        adminPanelMessage.className = 'message error';
+      const action = e.target.getAttribute('data-action');
+      
+      if (action === 'toggle-ban') {
+        try {
+          const resp = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(username)}/ban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include'
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || 'Не удалось изменить статус');
+          }
+          adminPanelMessage.textContent = `Пользователь ${username} ${data.banned ? 'заблокирован' : 'разблокирован'}`;
+          adminPanelMessage.className = 'message success';
+          const users = await fetchUsers();
+          renderUsers(users);
+        } catch (err) {
+          adminPanelMessage.textContent = err.message;
+          adminPanelMessage.className = 'message error';
+        }
         return;
       }
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(username)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ balance: balanceValue })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.error || 'Не удалось сохранить');
+      
+      if (action === 'save-balance') {
+        const input = usersTable.querySelector(`input[data-username="${username}"]`);
+        const balanceValue = Number(input.value);
+        if (!Number.isFinite(balanceValue) || balanceValue < 0) {
+          adminPanelMessage.textContent = 'Введите корректный баланс.';
+          adminPanelMessage.className = 'message error';
+          return;
         }
-        adminPanelMessage.textContent = `Баланс ${data.username} обновлён: ${data.balance} 🍬`;
-        adminPanelMessage.className = 'message success';
-        input.value = data.balance;
-        input.parentElement.previousElementSibling.textContent = `${data.balance} 🍬`;
+        try {
+          const resp = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(username)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ balance: balanceValue })
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || 'Не удалось сохранить');
+          }
+          adminPanelMessage.textContent = `Баланс ${data.username} обновлён: ${data.balance} 🍬`;
+          adminPanelMessage.className = 'message success';
+          input.value = data.balance;
+          input.parentElement.previousElementSibling.previousElementSibling.textContent = `${data.balance} 🍬`;
+          const users = await fetchUsers();
+          renderUsers(users);
+        } catch (err) {
+          adminPanelMessage.textContent = err.message;
+          adminPanelMessage.className = 'message error';
+        }
+      }
+    });
+    
+    document.getElementById('downloadUsersBtn').addEventListener('click', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/download/users.json`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось скачать');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'users.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    });
+    
+    document.getElementById('downloadHistoryBtn').addEventListener('click', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/download/history.json`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось скачать');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'history.json';
+        a.click();
+        URL.revokeObjectURL(url);
       } catch (err) {
         adminPanelMessage.textContent = err.message;
         adminPanelMessage.className = 'message error';

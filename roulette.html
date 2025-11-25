@@ -119,11 +119,39 @@
       if (clear) ctx.clearRect(0, 0, 300, 300);
       const center = 150;
       const radius = 130;
-      const baseSegments = list.length ? list : placeholderSegments();
-      const segments = baseSegments.map((segment, idx) => ({
-        ...segment,
-        color: segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length]
-      }));
+      
+      // Если нет игроков - просто показываем пустое колесо без сегментов
+      if (!list || list.length === 0) {
+        const bgGradient = ctx.createRadialGradient(center, center, 20, center, center, radius);
+        bgGradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+        bgGradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, Math.PI * 2);
+        ctx.fillStyle = bgGradient;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        const hubGradient = ctx.createRadialGradient(center, center, 8, center, center, 42);
+        hubGradient.addColorStop(0, '#f5f7ff');
+        hubGradient.addColorStop(1, '#7f5af0');
+        ctx.beginPath();
+        ctx.arc(center, center, 42, 0, Math.PI * 2);
+        ctx.fillStyle = hubGradient;
+        ctx.fill();
+        renderLegend([]);
+        return;
+      }
+      
+      // Убеждаемся что у каждого игрока есть цвет
+      const segments = list.map((segment, idx) => {
+        if (!segment.color) {
+          segment.color = COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length];
+        }
+        return segment;
+      });
       const totalBet = segments.reduce((s, p) => s + (p.bet || 1), 0) || 1;
 
       // base glow

@@ -30,6 +30,13 @@ app.use(
     cookie: { secure: false }
   })
 );
+// Запрещаем прямой доступ к JSON файлам
+app.use((req, res, next) => {
+  if (req.path.endsWith('.json') && !req.path.startsWith('/admin/download/')) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname)));
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
@@ -114,7 +121,7 @@ app.post('/register', (req, res) => {
     // Клиент уже передаёт SHA-256‐хэш
     const passwordHash = password;
 
-    all.push({ username, passwordHash, balance: 1000, ip: userIP });
+    all.push({ username, passwordHash, balance: 1000, ip: userIP, banned: false });
     writeUsers(all);
 
     res.json({ message: 'Регистрация успешна!' });
@@ -132,6 +139,11 @@ app.post('/login', (req, res) => {
   try {
     const user = findUser(username);
     if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    // Проверяем блокировку
+    if (user.banned === true) {
+      return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Напишите в лс @zooond' });
+    }
 
     // Сравниваем хэши паролей
     if (user.passwordHash !== password) {
@@ -156,6 +168,9 @@ app.get('/check-auth', (req, res) => {
     try {
       const user = findUser(req.session.user.username);
       if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+      if (user.banned === true) {
+        return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Напишите в лс @zooond' });
+      }
       return res.json({ username: user.username, balance: user.balance });
     } catch (err) {
       console.error(err);
@@ -169,6 +184,9 @@ app.get('/check-auth', (req, res) => {
   const user = all.find((u) => u.ip === userIP);
 
   if (user) {
+    if (user.banned === true) {
+      return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Напишите в лс @zooond' });
+    }
     req.session.user = { username: user.username };
     return res.json({ username: user.username, balance: user.balance });
   }
@@ -212,7 +230,11 @@ app.get('/admin/session', (req, res) => {
 });
 
 app.get('/admin/users', requireAdmin, (req, res) => {
-  const users = readUsers().map(({ username, balance }) => ({ username, balance }));
+  const users = readUsers().map(({ username, balance, banned }) => ({ 
+    username, 
+    balance, 
+    banned: banned === true 
+  }));
   res.json(users);
 });
 
@@ -230,6 +252,30 @@ app.patch('/admin/users/:username', requireAdmin, (req, res) => {
   users[idx].balance = balance;
   writeUsers(users);
   res.json({ username: users[idx].username, balance: users[idx].balance });
+});
+
+app.post('/admin/users/:username/ban', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const users = readUsers();
+  const idx = users.findIndex((u) => u.username === username);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  users[idx].banned = !users[idx].banned;
+  writeUsers(users);
+  res.json({ username: users[idx].username, banned: users[idx].banned });
+});
+
+app.get('/admin/download/users.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="users.json"');
+  res.sendFile(usersFile);
+});
+
+app.get('/admin/download/history.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="history.json"');
+  res.sendFile(historyFile);
 });
 // ======= конец админки =======
 
