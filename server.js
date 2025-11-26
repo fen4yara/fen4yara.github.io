@@ -62,7 +62,7 @@ const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.jso
 // YooMoney конфигурация
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
 const YOOMONEY_NOTIFICATION_SECRET =
-  process.env.YOOMONEY_NOTIFICATION_SECRET || 'replace_with_real_secret';
+  process.env.YOOMONEY_NOTIFICATION_SECRET || '462E5148371624E4CFF9A57AB5DDE2255A9AAECD8DC6C1161B1D03FBE6728E0623C46842E935E9B0A1BA263CAA651CB1734AAE31348569957057FA77EC7A841B';
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || 'https://fen4yaragithubio-production.up.railway.app';
 const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '';
