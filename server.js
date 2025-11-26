@@ -53,7 +53,7 @@ const promocodesFile = path.join(__dirname, 'data', 'promocodes.json');
 const promocodeUsageFile = path.join(__dirname, 'data', 'promocode-usage.json');
 const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.json');
 
-// YooMoney API конфигурация
+// YooMoney API кaонфигурация
 const YOOMONEY_API_TOKEN = '035C9025C933C61B6983BEF6FE1057707096DC0852888FA7CD453E30E0A98F7B';
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номйер кошелька получателя
 const ensureUsersFileExists = () => {
