@@ -10,7 +10,7 @@ const {
   YMPaymentFormBuilder,
   YMNotificationChecker,
   YMNotificationError
-} = require('yoomoney-sdk');
+} = require('./lib/yoomoney-sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;

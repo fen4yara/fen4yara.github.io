@@ -11,7 +11,6 @@
   "license": "ISC",
   "dependencies": {
     "express": "^5.1.0",
-    "express-session": "^1.18.1",
-    "yoomoney-sdk": "github:AlexXanderGrib/yoomoney-sdk"
+    "express-session": "^1.18.1"
   }
 }
