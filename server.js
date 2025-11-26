@@ -6,6 +6,7 @@ const session = require('express-session');
 const cors = require('cors');
 const https = require('https');
 const querystring = require('querystring');
+const { API: YooMoneyAPI } = require('yoomoney-sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,9 +54,15 @@ const promocodesFile = path.join(__dirname, 'data', 'promocodes.json');
 const promocodeUsageFile = path.join(__dirname, 'data', 'promocode-usage.json');
 const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.json');
 
-// YooMoney API кaонфигурация
+// YooMoney API конфигурация
 const YOOMONEY_API_TOKEN = '035C9025C933C61B6983BEF6FE1057707096DC0852888FA7CD453E30E0A98F7B';
-const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номйер кошелька получателя
+const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
+let yooMoneyClient = null;
+try {
+  yooMoneyClient = new YooMoneyAPI(YOOMONEY_API_TOKEN);
+} catch (err) {
+  console.error('Не удалось инициализировать YooMoney SDK:', err.message);
+}
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data'); 
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -646,100 +653,112 @@ app.post('/profile/yoomoney/webhook', express.urlencoded({ extended: true }), (r
   res.status(200).send('OK');
 });
 
-// Функция для парсинга XML ответа от YooMoney API
-// Парсим XML вручную через регулярные выражения
-function parseYooMoneyXML(xmlString) {
-  const operations = [];
-  
-  // Находим все теги <operation>
-  const operationMatches = xmlString.match(/<operation[^>]*>[\s\S]*?<\/operation>/gi);
-  
-  if (operationMatches) {
-    for (const opMatch of operationMatches) {
-      const operation = {};
-      
-      // Извлекаем атрибуты и значения
-      const labelMatch = opMatch.match(/label=["']([^"']+)["']/i);
-      const amountMatch = opMatch.match(/amount=["']([^"']+)["']/i);
-      const operationIdMatch = opMatch.match(/operation_id=["']([^"']+)["']/i);
-      const datetimeMatch = opMatch.match(/datetime=["']([^"']+)["']/i);
-      const directionMatch = opMatch.match(/direction=["']([^"']+)["']/i);
-      
-      if (labelMatch) {
-        operation.label = labelMatch[1];
-      }
-      if (amountMatch) {
-        operation.amount = amountMatch[1];
-      }
-      if (operationIdMatch) {
-        operation.operation_id = operationIdMatch[1];
-      }
-      if (datetimeMatch) {
-        operation.datetime = datetimeMatch[1];
-      }
-      if (directionMatch) {
-        operation.direction = directionMatch[1];
-      }
-      
-      // Извлекаем значения из тегов
-      const labelTagMatch = opMatch.match(/<label[^>]*>([^<]+)<\/label>/i);
-      const amountTagMatch = opMatch.match(/<amount[^>]*>([^<]+)<\/amount>/i);
-      const operationIdTagMatch = opMatch.match(/<operation_id[^>]*>([^<]+)<\/operation_id>/i);
-      
-      if (labelTagMatch && !operation.label) {
-        operation.label = labelTagMatch[1].trim();
-      }
-      if (amountTagMatch && !operation.amount) {
-        operation.amount = amountTagMatch[1].trim();
-      }
-      if (operationIdTagMatch && !operation.operation_id) {
-        operation.operation_id = operationIdTagMatch[1].trim();
-      }
-      
-      if (operation.label) {
-        operations.push(operation);
-      }
-    }
-  }
-  
-  return {
-    operations: {
-      operation: operations
-    }
-  };
-}
-
-// Функция для проверки входящих платежей
-// ВАЖНО: Для quickpay формы не требуется API кошелька YooMoney
-// Quickpay форма работает через обычные переводы, а не через API кошелька
-// Основная проверка происходит через webhook уведомления
-// Эта функция используется только для логирования и статистики
+// Функция для проверки входящих платежей через yoomoney-sdk
 async function checkYooMoneyIncomingPayments() {
+  if (!yooMoneyClient) {
+    return { error: 'YooMoney SDK не инициализирован' };
+  }
+
+  const payments = readYooMoneyPayments();
+  const pendingPayments = payments.filter((p) => p.status === 'pending');
+  if (pendingPayments.length === 0) {
+    return { processedCount: 0, pendingCount: 0 };
+  }
+
   try {
-    // Для quickpay формы мы не можем использовать operation-history API
-    // так как он требует OAuth токен, который нужно получать через регистрацию приложения
-    // Вместо этого полагаемся на webhook уведомления
-    
-    const payments = readYooMoneyPayments();
-    const pendingPayments = payments.filter(p => p.status === 'pending');
-    
-    // Проверяем платежи, которые были созданы недавно (последние 30 минут)
-    // Если платеж был создан давно и все еще pending, возможно он не был оплачен
-    const now = Date.now();
-    const recentPayments = pendingPayments.filter(p => {
-      const timeDiff = now - p.createdAt;
-      return timeDiff < 30 * 60 * 1000; // Последние 30 минут
+    const response = await yooMoneyClient.operationHistory({
+      type: 'deposition',
+      records: 30
     });
 
-    console.log(`Ожидающих платежей: ${pendingPayments.length}, из них недавних: ${recentPayments.length}`);
+    const operationsRaw =
+      (response && response.operations) ||
+      (response && response.data) ||
+      [];
 
-    // Основная обработка платежей происходит через webhook endpoint
-    // Эта функция только для статистики
-    
-    return { processedCount: 0, pendingCount: pendingPayments.length };
+    const operations = Array.isArray(operationsRaw)
+      ? operationsRaw
+      : operationsRaw.operation && Array.isArray(operationsRaw.operation)
+        ? operationsRaw.operation
+        : operationsRaw.operation
+          ? [operationsRaw.operation]
+          : [];
+
+    let processedCount = 0;
+
+    operations.forEach((operation) => {
+      if (!operation) return;
+      const opLabel = String(operation.label || '').trim();
+      if (!opLabel) return;
+
+      const payment = pendingPayments.find((p) => {
+        const paymentLabel = String(p.label).trim();
+        return (
+          paymentLabel === opLabel ||
+          opLabel.includes(p.paymentId) ||
+          paymentLabel.includes(opLabel)
+        );
+      });
+
+      if (!payment) {
+        return;
+      }
+
+      const operationAmount =
+        Number(operation.amount) ||
+        Number(operation.sum) ||
+        Number(operation.amount_due) ||
+        0;
+
+      if (operationAmount < payment.amount) {
+        return;
+      }
+
+      const paymentIndex = payments.findIndex(
+        (p) => p.paymentId === payment.paymentId
+      );
+      if (paymentIndex === -1) {
+        return;
+      }
+
+      payments[paymentIndex].status = 'success';
+      payments[paymentIndex].operationId =
+        operation.operation_id || operation.operationId || 'unknown';
+      payments[paymentIndex].completedAt = Date.now();
+      writeYooMoneyPayments(payments);
+
+      const user = findUser(payment.username);
+      if (user) {
+        const updatedBalance = user.balance + payment.amount;
+        updateUserBalance(payment.username, updatedBalance);
+
+        const allDeposits = readDeposits();
+        allDeposits.push({
+          username: payment.username,
+          amount: payment.amount,
+          timestamp: Date.now(),
+          method: 'yoomoney',
+          paymentId: payment.paymentId
+        });
+        if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
+          allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
+        }
+        writeDeposits(allDeposits);
+
+        processedCount += 1;
+        console.log(
+          `✅ Платеж ${payment.paymentId} подтвержден через yoomoney-sdk на сумму ${payment.amount}`
+        );
+      }
+    });
+
+    return {
+      processedCount,
+      pendingCount: pendingPayments.length - processedCount
+    };
   } catch (error) {
-    // Не логируем ошибку, так как мы не используем API
-    return { processedCount: 0, pendingCount: 0 };
+    console.error('Ошибка проверки платежей через yoomoney-sdk:', error);
+    return { error: error.message };
   }
 }
 
