@@ -355,32 +355,43 @@ async function trySyncPaymentWithAPI(payment, payments) {
   if (!yoomoneyApiClient || payment.status !== 'pending') {
     return false;
   }
+  const queries = [
+    { label: payment.label, records: 20 },
+    { type: 'deposition', records: 50 },
+    { records: 200 }
+  ];
   try {
-    const history = await yoomoneyApiClient.operationHistory({
-      type: 'deposition',
-      records: 50
-    });
-    const operations = Array.isArray(history.operations) ? history.operations : [];
-    const match = operations.find((op) => {
-      if (!op) return false;
-      const directionOk = op.direction ? String(op.direction).toLowerCase() === 'in' : true;
-      const statusOk = op.status ? String(op.status).toLowerCase() === 'success' : true;
-      return directionOk && statusOk && operationMatchesPayment(op, payment);
-    });
-    if (!match) {
-      return false;
+    for (const params of queries) {
+      let history;
+      try {
+        history = await yoomoneyApiClient.operationHistory(params);
+      } catch (err) {
+        console.warn('YooMoney operationHistory query failed:', params, err.message || err);
+        continue;
+      }
+      const operations = Array.isArray(history.operations) ? history.operations : [];
+      const match = operations.find((op) => {
+        if (!op) return false;
+        const directionOk = op.direction ? String(op.direction).toLowerCase() === 'in' : true;
+        const statusOk = op.status ? String(op.status).toLowerCase() === 'success' : true;
+        return directionOk && statusOk && operationMatchesPayment(op, payment);
+      });
+      if (!match) {
+        continue;
+      }
+      const paidAmount = extractOperationAmount(match);
+      if (paidAmount === null) {
+        continue;
+      }
+      finalizeYooMoneyPayment(payment, payments, {
+        paidAmount,
+        operationId: match.operation_id || match.operationId || `api_${Date.now()}`,
+        source: 'api_history',
+        payload: match
+      });
+      return true;
     }
-    const paidAmount = extractOperationAmount(match);
-    if (paidAmount === null) {
-      return false;
-    }
-    finalizeYooMoneyPayment(payment, payments, {
-      paidAmount,
-      operationId: match.operation_id || match.operationId || `api_${Date.now()}`,
-      source: 'api_history',
-      payload: match
-    });
-    return true;
+    return false;
   } catch (err) {
     console.error('YooMoney API sync failed:', err.message || err);
     return false;
