@@ -103,6 +103,13 @@
   let lastCoefBeforeCrash = null;
   let cachedCrashHistory = [];
 
+  betInputEl.addEventListener('input', () => {
+    const manualValue = parseInt(betInputEl.value, 10);
+    if (!Number.isNaN(manualValue)) {
+      lastBet = manualValue;
+    }
+  });
+
   window.addEventListener('DOMContentLoaded', async () => {
     resizeChart();
     window.addEventListener('resize', resizeChart);
@@ -197,7 +204,7 @@
         autoCashoutTarget = null;
         lastCoefBeforeCrash = null;
         coefficientEl.style.color = '';
-        if (lastBet > 0) {
+        if (lastBet > 0 && !betInputEl.matches(':focus')) {
           betInputEl.value = lastBet;
         }
         actionBtn.disabled = false;

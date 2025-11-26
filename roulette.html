@@ -504,7 +504,7 @@
 
     function computeSlices(list) {
       const totalBet = list.reduce((s, p) => s + p.bet, 0) || 1;
-      let angleAcc = 0;
+      let angleAcc = -Math.PI / 2;
       let ticketAcc = 0;
       return list.map(p => {
         const slice = {
