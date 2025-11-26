@@ -28,8 +28,8 @@
       </article>
       <article class="glass-card stat-card">
         <p class="muted">Мини-режимы</p>
-        <h2>4 активных</h2>
-        <p class="stat-subtext">🚀 Краш, 🎯 Рулетка, 💰 Коинфлип, 🎲 Дайс</p>
+        <h2>5 активных</h2>
+        <p class="stat-subtext">🚀 Краш, 🎯 Рулетка, 💰 Коинфлип, 🎲 Дайс, 🧩 Плинко</p>
       </article>
     </section>
 
@@ -61,9 +61,17 @@
         <p class="muted">Выбери процент и сторону, ставь на меньше или больше.</p>
         <button class="btn-primary" onclick="window.location.href='dice.html'">Играть в «Дайс»</button>
       </article>
+
+      <article class="glass-card game-card">
+        <span class="tag">🧩 Плинко</span>
+        <h3>Плинко</h3>
+        <p class="muted">Настрой риск и количество рядов, запускай шар и лови множитель.</p>
+        <button class="btn-primary" onclick="window.location.href='plinko.html'">Играть в «Плинко»</button>
+      </article>
     </section>
   </div>
 
+  <script src="script/utils.js"></script>
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
 
@@ -81,7 +89,7 @@
 
         const user = await response.json();
         document.getElementById('username').textContent = user.username;
-        document.getElementById('balance').textContent = user.balance;
+        document.getElementById('balance').textContent = formatCoins(user.balance);
       } catch (err) {
         console.error('Auth error:', err);
         alert('Ошибка авторизации: ' + err.message);

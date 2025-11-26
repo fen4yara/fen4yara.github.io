@@ -64,6 +64,7 @@
     </div>
   </div>
 
+<script src="script/utils.js"></script>
 <script>
   const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
 
@@ -117,7 +118,7 @@
       const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
       if (!resp.ok) throw new Error('Не авторизован');
       user = await resp.json();
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance);
 
       // инициализация UI
       actionBtn.disabled = false;
@@ -147,9 +148,9 @@
       colorDot.className = 'player-color';
       colorDot.style.background = p.color || '#888';
       const text = document.createElement('span');
-      text.textContent = `${p.username} — ${p.bet} 🍬`;
+      text.textContent = `${p.username} — ${formatCandy(p.bet)}`;
       if (p.cashedOut) {
-        text.textContent += ` → забрал(а) x${(p.cashoutCoef||0).toFixed(2)} (выигрыш ${p.winnings} 🍬)`;
+        text.textContent += ` → забрал(а) x${(p.cashoutCoef||0).toFixed(2)} (выигрыш ${formatCandy(p.winnings)})`;
       }
       div.append(colorDot, text);
       playersContainer.append(div);
@@ -497,7 +498,7 @@
       const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
       if (!resp.ok) throw new Error('Не авторизован');
       user = await resp.json();
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance);
     } catch {
       // игнорируем
     }
@@ -538,7 +539,7 @@
       if (!resp.ok) throw new Error(data.error || 'Ошибка при ставке');
 
       user.balance -= betValue;
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance);
 
       renderPlayers(data.players || []);
       bettingEndTime = data.bettingEndTime;
@@ -588,9 +589,9 @@
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Ошибка при выплате');
 
-      showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${coefToTake.toFixed(2)})`, 'green');
+      showMessage(`✅ Вы забрали ${formatCandy(data.winnings)} (x${coefToTake.toFixed(2)})`, 'green');
       user.balance = data.newBalance;
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance);
 
       const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
       const stData = await state.json();
@@ -626,16 +627,16 @@
         li.className = 'history-item clickable';
         const date = new Date(round.timestamp);
         const header = document.createElement('div');
-        header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet}🍬`;
+        header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${formatCandy(round.totalBet)}`;
         li.append(header);
 
         const subUl = document.createElement('ul');
         subUl.className = 'history-players';
         round.players.forEach((p) => {
           const subLi = document.createElement('li');
-          let txt = `${p.username} — ставка ${p.bet}🍬`;
+          let txt = `${p.username} — ставка ${formatCandy(p.bet)}`;
           if (p.cashedOut) {
-            txt += `, забрал(а) на x${p.cashoutCoef.toFixed(2)} → выигрыш ${p.winnings}🍬`;
+            txt += `, забрал(а) на x${p.cashoutCoef.toFixed(2)} → выигрыш ${formatCandy(p.winnings)}`;
           } else {
             txt += `, проиграл(а)`;
           }
@@ -657,16 +658,16 @@
     const playersList = (round.players || [])
       .map((p) => {
         const status = p.cashedOut
-          ? `забрал x${p.cashoutCoef?.toFixed(2) || '—'} → ${p.winnings}🍬`
+          ? `забрал x${p.cashoutCoef?.toFixed(2) || '—'} → ${formatCandy(p.winnings)}`
           : 'проиграл';
-        return `<li><strong>${p.username}</strong> — ставка ${p.bet}🍬, ${status}</li>`;
+        return `<li><strong>${p.username}</strong> — ставка ${formatCandy(p.bet)}, ${status}</li>`;
       })
       .join('');
 
     historyModalBody.innerHTML = `
       <p class="muted">${date}</p>
       <h2>Краш x${round.crashPoint.toFixed(2)}</h2>
-      <p>Пул: ${round.totalBet} 🍬</p>
+      <p>Пул: ${formatCandy(round.totalBet)}</p>
       <ul class="history-players highlight">${playersList || '<li>Нет данных</li>'}</ul>
     `;
     historyModal.classList.remove('hidden');

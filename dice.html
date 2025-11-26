@@ -71,6 +71,7 @@
     </section>
   </div>
 
+  <script src="script/utils.js"></script>
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
@@ -99,9 +100,9 @@
       const bet = Number(betInput.value) || 0;
       if (bet > 0) {
         const payout = Math.floor(bet * multiplier);
-        payoutEl.textContent = payout;
+        payoutEl.textContent = formatCoins(payout);
       } else {
-        payoutEl.textContent = '0';
+        payoutEl.textContent = formatCoins(0);
       }
 
       // Процент применяется к выбранной стороне
@@ -165,7 +166,7 @@
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
-        balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
         if (lastBet > 0) {
           betInput.value = lastBet;
           updateMultiplier();
@@ -205,11 +206,11 @@
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
         
         user.balance = data.newBalance;
-        balanceEl.textContent = data.newBalance;
+        balanceEl.textContent = formatCoins(data.newBalance);
         lastBet = bet;
         
         statusEl.textContent = data.win
-          ? `🎉 Выпало ${data.roll}. Победа! Выигрыш: ${data.payout}🍬`
+          ? `🎉 Выпало ${data.roll}. Победа! Выигрыш: ${formatCandy(data.payout)}`
           : `🙅 Выпало ${data.roll}. Попробуй ещё`;
         statusEl.className = `message ${data.win ? 'success' : 'error'}`;
         
@@ -248,7 +249,7 @@
         const date = new Date(entry.timestamp).toLocaleTimeString('ru-RU');
         const outcome = entry.win ? '→ Победа' : '→ Поражение';
         const sideText = entry.side === 'less' ? 'Меньше' : 'Больше';
-        item.innerHTML = `<strong>${date}</strong> — ${entry.username}: ${sideText} ${entry.percent}%, выпало ${entry.roll} ${outcome} (${entry.bet}🍬)`;
+        item.innerHTML = `<strong>${date}</strong> — ${entry.username}: ${sideText} ${entry.percent}%, выпало ${entry.roll} ${outcome} (${formatCandy(entry.bet)})`;
         historyList.appendChild(item);
       });
     }

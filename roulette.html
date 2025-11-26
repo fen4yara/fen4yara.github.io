@@ -60,6 +60,7 @@
     </div>
   </div>
 
+  <script src="script/utils.js"></script>
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
@@ -238,7 +239,7 @@
         left.appendChild(name);
 
         const bet = document.createElement('strong');
-        bet.textContent = `${p.bet} 🍬`;
+        bet.textContent = formatCandy(p.bet);
 
         item.appendChild(left);
         item.appendChild(bet);
@@ -268,7 +269,7 @@
         const ticketInfo = typeof round.winningTicket === 'number'
           ? `, билет ${round.winningTicket.toFixed(2)}`
           : '';
-        body.textContent = `Банк: ${round.totalBet} 🍬${ticketInfo}`;
+        body.textContent = `Банк: ${formatCandy(round.totalBet)}${ticketInfo}`;
         card.appendChild(header);
         card.appendChild(body);
         card.addEventListener('click', () => openRouletteHistoryModal(round));
@@ -283,13 +284,13 @@
         ? round.winningTicket.toFixed(2)
         : '—';
       const playersList = (round.players || [])
-        .map((p) => `<li><strong>${p.username}</strong> — ставка ${p.bet} 🍬</li>`)
+        .map((p) => `<li><strong>${p.username}</strong> — ставка ${formatCandy(p.bet)}</li>`)
         .join('');
 
       detailModalBody.innerHTML = `
         <p class="muted">${date}</p>
         <h2>Победитель: ${round.winner}</h2>
-        <p>Банк: ${round.totalBet} 🍬 · Билет: ${ticketInfo}</p>
+        <p>Банк: ${formatCandy(round.totalBet)} · Билет: ${ticketInfo}</p>
         <ul class="history-players highlight">${playersList || '<li>Нет данных</li>'}</ul>
       `;
       detailModal.classList.remove('hidden');
@@ -317,7 +318,9 @@
         }
         const data = await resp.json();
         players = data.players;
-        drawWheelByList(players);
+        if (!isAnimating) {
+          drawWheelByList(players);
+        }
 
         // Пересчитываем локальную метку nextSpinTimestamp:
         if (data.nextSpin !== null) {
@@ -481,7 +484,7 @@
           const ticketNote = typeof winningTicket === 'number'
             ? ` (билет ${winningTicket.toFixed(2)})`
             : '';
-          showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${totalPot} 🍬${ticketNote}`, 'green');
+          showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${formatCandy(totalPot)}${ticketNote}`, 'green');
           fetch(`${BASE_URL}/check-auth`, { credentials: 'include' })
             .then(r2 => {
               if (!r2.ok) throw new Error('Не удалось обновить баланс');
@@ -489,7 +492,7 @@
             })
             .then(userData => {
               user.balance = userData.balance;
-              balanceEl.textContent = user.balance;
+              balanceEl.textContent = formatCoins(user.balance);
             })
             .catch(err => console.error(err))
             .finally(() => {
@@ -531,7 +534,7 @@
         if (lastBet > 0) {
           document.getElementById('bet').value = lastBet;
         }
-        balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
 
         await fetchPlayersAndDraw();
         await loadRouletteHistory();
@@ -568,13 +571,15 @@
         }
 
         players = data.players;
-        drawWheelByList(players);
+        if (!isAnimating) {
+          drawWheelByList(players);
+        }
 
         const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (check.ok) {
           const upd = await check.json();
           user.balance = upd.balance;
-          balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
         }
         showMessage('Вы в игре. Ждём спина...', '#333');
         lastBet = betValue;

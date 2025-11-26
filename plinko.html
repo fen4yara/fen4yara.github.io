@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Плинко · 320xbet</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="game-page">
+    <header class="glass-card top-bar">
+      <div>
+        <p class="eyebrow">Режим</p>
+        <h1>🧩 Плинко</h1>
+        <p class="muted">Настрой риск и количество рядов, бросай шар и лови максимальный множитель.</p>
+      </div>
+      <button class="btn-outline" onclick="window.location.href='mainPage.html'">⬅ Назад</button>
+    </header>
+
+    <section class="plinko-layout">
+      <article class="glass-card plinko-controls">
+        <div class="balance-pill">
+          Баланс: <span id="balance">...</span> 🍬
+        </div>
+
+        <label class="muted" for="betInput">Ставка</label>
+        <input type="number" id="betInput" min="1" class="input-field" placeholder="Введите ставку" />
+
+        <label class="muted">Риск</label>
+        <div class="option-toggle">
+          <button class="btn-secondary option-btn" data-risk="low">Низкий</button>
+          <button class="btn-secondary option-btn active" data-risk="medium">Средний</button>
+          <button class="btn-secondary option-btn" data-risk="high">Высокий</button>
+        </div>
+
+        <label class="muted" for="rowsSelect">Количество рядов</label>
+        <select id="rowsSelect" class="input-field"></select>
+
+        <button id="dropBtn" class="btn-primary" style="margin-top: 12px;">Бросить шар</button>
+        <p id="plinkoMessage" class="message"></p>
+      </article>
+
+      <article class="glass-card plinko-board-card">
+        <div class="plinko-board" id="plinkoBoard">
+          <div class="plinko-pegs" id="plinkoPegLayer"></div>
+          <div class="plinko-ball hidden" id="plinkoBall"></div>
+        </div>
+        <div class="plinko-payouts" id="plinkoPayouts"></div>
+      </article>
+
+      <article class="glass-card history-card">
+        <p class="eyebrow">Последние падения</p>
+        <div id="plinkoHistoryList" class="history-list"></div>
+      </article>
+    </section>
+  </div>
+
+  <script src="script/utils.js"></script>
+  <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+    let user = null;
+    let plinkoConfig = null;
+    let selectedRisk = 'medium';
+    let selectedRows = 12;
+    let isAnimating = false;
+    let highlightedSlot = null;
+
+    const balanceEl = document.getElementById('balance');
+    const betInput = document.getElementById('betInput');
+    const rowsSelect = document.getElementById('rowsSelect');
+    const riskButtons = document.querySelectorAll('[data-risk]');
+    const dropBtn = document.getElementById('dropBtn');
+    const messageEl = document.getElementById('plinkoMessage');
+    const pegLayer = document.getElementById('plinkoPegLayer');
+    const boardEl = document.getElementById('plinkoBoard');
+    const ballEl = document.getElementById('plinkoBall');
+    const payoutsEl = document.getElementById('plinkoPayouts');
+    const historyList = document.getElementById('plinkoHistoryList');
+
+    const riskTitles = {
+      low: 'низкий',
+      medium: 'средний',
+      high: 'высокий'
+    };
+
+    riskButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (isAnimating) return;
+        selectedRisk = btn.dataset.risk;
+        riskButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        renderPayouts();
+      });
+    });
+
+    rowsSelect.addEventListener('change', () => {
+      selectedRows = Number(rowsSelect.value);
+      renderBoard();
+    });
+
+    dropBtn.addEventListener('click', () => {
+      if (!isAnimating) {
+        playPlinko();
+      }
+    });
+
+    async function init() {
+      try {
+        const authResp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (!authResp.ok) throw new Error('Не авторизован');
+        user = await authResp.json();
+        balanceEl.textContent = formatCoins(user.balance);
+
+        const configResp = await fetch(`${BASE_URL}/plinko/config`, { credentials: 'include' });
+        if (!configResp.ok) throw new Error('Не удалось получить конфигурацию');
+        plinkoConfig = await configResp.json();
+        populateRowsSelect();
+        renderBoard();
+        await loadHistory();
+      } catch (err) {
+        alert(err.message || 'Ошибка загрузки');
+        window.location.href = 'index.html';
+      }
+    }
+
+    function populateRowsSelect() {
+      rowsSelect.innerHTML = '';
+      (plinkoConfig?.rows || []).forEach((row) => {
+        const option = document.createElement('option');
+        option.value = row;
+        option.textContent = `${row} рядов`;
+        if (row === selectedRows) option.selected = true;
+        rowsSelect.appendChild(option);
+      });
+    }
+
+    function renderBoard() {
+      pegLayer.innerHTML = '';
+      const rows = selectedRows;
+      for (let r = 0; r < rows; r++) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'plinko-row';
+        for (let c = 0; c <= r; c++) {
+          const peg = document.createElement('span');
+          peg.className = 'plinko-peg';
+          rowEl.appendChild(peg);
+        }
+        pegLayer.appendChild(rowEl);
+      }
+      resetBall();
+      renderPayouts();
+    }
+
+    function getMultipliers() {
+      return plinkoConfig?.multipliers?.[selectedRisk]?.[selectedRows] || [];
+    }
+
+    function renderPayouts() {
+      payoutsEl.innerHTML = '';
+      highlightedSlot = null;
+      const multipliers = getMultipliers();
+      if (!multipliers.length) return;
+
+      multipliers.forEach((mult, idx) => {
+        const slot = document.createElement('div');
+        slot.className = 'plinko-slot';
+        slot.textContent = `${mult.toFixed(2)}x`;
+        slot.dataset.index = idx;
+        payoutsEl.appendChild(slot);
+      });
+    }
+
+    function highlightSlot(index) {
+      if (!payoutsEl.children.length) return;
+      if (highlightedSlot !== null && payoutsEl.children[highlightedSlot]) {
+        payoutsEl.children[highlightedSlot].classList.remove('highlight');
+      }
+      const slot = payoutsEl.children[index];
+      if (slot) {
+        slot.classList.add('highlight');
+        highlightedSlot = index;
+      }
+    }
+
+    function setMessage(text, tone = 'muted') {
+      messageEl.textContent = text;
+      messageEl.style.color =
+        tone === 'error' ? 'var(--danger)' : tone === 'success' ? 'var(--success)' : 'var(--text-muted)';
+    }
+
+    async function playPlinko() {
+      const bet = Number(betInput.value);
+      if (!bet || bet <= 0) {
+        setMessage('Введите корректную ставку', 'error');
+        return;
+      }
+      if (bet > user.balance) {
+        setMessage('Недостаточно средств', 'error');
+        return;
+      }
+      setMessage('');
+      dropBtn.disabled = true;
+      try {
+        const resp = await fetch(`${BASE_URL}/plinko/play`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ bet, risk: selectedRisk, rows: selectedRows })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
+
+        user.balance = data.newBalance;
+        balanceEl.textContent = formatCoins(user.balance);
+
+        const net = data.payout - bet;
+        const message = data.payout > 0
+          ? `🎉 x${data.multiplier.toFixed(2)} → ${formatSignedCandy(net)}`
+          : 'Проигрыш. Попробуй снова';
+        setMessage(message, data.payout > 0 ? 'success' : 'muted');
+
+        await animatePath(Array.isArray(data.path) ? data.path : [], data.bucket);
+        renderHistory(data.history || []);
+      } catch (err) {
+        setMessage(err.message || 'Ошибка', 'error');
+      } finally {
+        isAnimating = false;
+        dropBtn.disabled = false;
+      }
+    }
+
+    function animatePath(path, bucketIndex) {
+      return new Promise((resolve) => {
+        const steps = Array.isArray(path) && path.length ? path : [selectedRows / 2];
+        const duration = 220;
+        isAnimating = true;
+        ballEl.classList.remove('hidden');
+        const width = boardEl.clientWidth;
+        const height = boardEl.clientHeight;
+        const rowHeight = height / (selectedRows + 2);
+
+        steps.forEach((value, idx) => {
+          setTimeout(() => {
+            const ratio = selectedRows === 0 ? 0.5 : value / selectedRows;
+            const x = ratio * width;
+            const y = idx * rowHeight;
+            ballEl.style.transform = `translate(${x - 12}px, ${y}px)`;
+            if (idx === steps.length - 1) {
+              highlightSlot(bucketIndex);
+              setTimeout(resolve, 200);
+            }
+          }, idx * duration);
+        });
+      });
+    }
+
+    function resetBall() {
+      ballEl.classList.add('hidden');
+      ballEl.style.transform = 'translate(-50%, -50%)';
+      highlightedSlot = null;
+      Array.from(payoutsEl.children).forEach((slot) => slot.classList.remove('highlight'));
+    }
+
+    async function loadHistory() {
+      try {
+        const resp = await fetch(`${BASE_URL}/plinko/history`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        renderHistory(data);
+      } catch (err) {
+        console.error('plinko history error', err);
+      }
+    }
+
+    function renderHistory(entries) {
+      historyList.innerHTML = '';
+      if (!Array.isArray(entries) || !entries.length) {
+        historyList.innerHTML = '<div class="history-item muted">История появится после первой игры</div>';
+        return;
+      }
+      entries.forEach((entry) => {
+        const card = document.createElement('div');
+        card.className = 'history-item';
+        const date = new Date(entry.timestamp);
+        const header = document.createElement('div');
+        header.innerHTML = `<strong>${date.toLocaleTimeString('ru-RU')}</strong> — ${entry.rows} рядов`;
+        const body = document.createElement('div');
+        body.className = 'muted';
+        const net = (entry.payout || 0) - (entry.bet || 0);
+        body.textContent = [
+          `Риск: ${riskTitles[entry.risk] || entry.risk}`,
+          `Ставка ${formatCandy(entry.bet)}`,
+          `x${Number(entry.multiplier || 0).toFixed(2)} → ${formatSignedCandy(net)}`
+        ].join(' · ');
+        card.appendChild(header);
+        card.appendChild(body);
+        historyList.appendChild(card);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
+

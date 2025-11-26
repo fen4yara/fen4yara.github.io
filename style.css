@@ -589,6 +589,95 @@ button.cashout {
   color: var(--text-muted);
 }
 
+.plinko-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.plinko-board-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.plinko-board {
+  position: relative;
+  width: min(100%, 420px);
+  height: 420px;
+  border-radius: 28px;
+  background: radial-gradient(circle at top, rgba(127, 90, 240, 0.25), rgba(8, 8, 24, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  padding: 16px;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.35);
+}
+
+.plinko-pegs {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.plinko-row {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  width: 100%;
+}
+
+.plinko-peg {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.plinko-ball {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, var(--accent-strong));
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  transition: transform 0.22s ease-in;
+  pointer-events: none;
+}
+
+.plinko-ball.hidden {
+  opacity: 0;
+}
+
+.plinko-payouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.plinko-slot {
+  text-align: center;
+  padding: 6px 4px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plinko-slot.highlight {
+  border-color: var(--accent-strong);
+  background: rgba(127, 90, 240, 0.18);
+  box-shadow: 0 0 10px rgba(127, 90, 240, 0.3);
+}
+
 @media (max-width: 900px) {
   body {
     padding: 20px 16px 40px;

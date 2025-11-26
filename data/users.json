@@ -1,0 +1,114 @@
+[
+  {
+    "username": "koty",
+    "passwordHash": "1d28c120568c10e19b9d8abe8b66d0983fa3d2e11ee7751aca50f83c6f4a43aa",
+    "balance": 0,
+    "ip": "85.249.25.87",
+    "banned": false
+  },
+  {
+    "username": "имиль препод",
+    "passwordHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "balance": 0,
+    "ip": "85.26.165.97",
+    "banned": false
+  },
+  {
+    "username": "кайфтыпоймалов",
+    "passwordHash": "ec429bb0ca74e6a730cd7eccd5a44404d98a3fb88f57c91087736ff6121827cc",
+    "balance": 0,
+    "ip": "89.223.104.125",
+    "banned": false
+  },
+  {
+    "username": "arkaha",
+    "passwordHash": "de70fa60cac227cbc13270a26ccde291af94df086959f0958122aedf154d90b5",
+    "balance": 0,
+    "ip": "2.63.251.160",
+    "banned": false
+  },
+  {
+    "username": "kamila",
+    "passwordHash": "a486d8c27c4089e9761ea5ccf739a068672b0fb151d7384d4b31088ca44e8216",
+    "balance": 0,
+    "ip": "91.107.102.210",
+    "banned": false
+  },
+  {
+    "username": "makan revrese nakam",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "препод лох",
+    "passwordHash": "f6e0a1e2ac41945a9aa7ff8a8aaa0cebc12a3bcc981a929ad5cf810a090e11ae",
+    "balance": 305,
+    "ip": "91.244.254.43",
+    "banned": true
+  },
+  {
+    "username": "препода на мыло",
+    "passwordHash": "f6e0a1e2ac41945a9aa7ff8a8aaa0cebc12a3bcc981a929ad5cf810a090e11ae",
+    "balance": 2370,
+    "ip": "91.244.254.43",
+    "banned": true
+  },
+  {
+    "username": "577 лучшие",
+    "passwordHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "balance": 99999950540,
+    "ip": "91.244.254.43",
+    "banned": false
+  },
+  {
+    "username": "ДААААЙ ДАЙЙЙЙЙ",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 1000,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "ДААЙ",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "макан наоборот макар",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "makan revrese nakam21",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "makan revrese nakam23",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "makan revrese nakam222",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "ПРОИГРЫВАЮ ЧИСЛАНУСЬ",
+    "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
+    "balance": 0,
+    "ip": "81.222.188.207",
+    "banned": false
+  }
+]

@@ -43,6 +43,7 @@
     </section>
   </div>
 
+  <script src="script/utils.js"></script>
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
@@ -73,7 +74,7 @@
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
-        balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
         if (lastBet > 0) {
           betInput.value = lastBet;
         }
@@ -103,9 +104,9 @@
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
-        balanceEl.textContent = data.newBalance;
+        balanceEl.textContent = formatCoins(data.newBalance);
         statusEl.textContent = data.win
-          ? `🎉 Выпал ${formatSide(data.result)}. Выигрыш: ${data.payout}🍬`
+          ? `🎉 Выпал ${formatSide(data.result)}. Выигрыш: ${formatCandy(data.payout)}`
           : `🤕 Выпал ${formatSide(data.result)}. Ставка проиграна`;
         statusEl.className = `message ${data.win ? 'success' : 'error'}`;
         lastBet = bet;
@@ -144,7 +145,7 @@
         }
         const date = new Date(entry.timestamp).toLocaleString('ru-RU');
         const outcome = entry.win ? '→ Победа' : '→ Поражение';
-        item.innerHTML = `<strong>${date}</strong> — ${entry.username} выбрал ${formatSide(entry.choice)}, выпал ${formatSide(entry.result)} ${outcome} (${entry.bet}🍬)`;
+        item.innerHTML = `<strong>${date}</strong> — ${entry.username} выбрал ${formatSide(entry.choice)}, выпал ${formatSide(entry.result)} ${outcome} (${formatCandy(entry.bet)})`;
         historyList.appendChild(item);
       });
     }

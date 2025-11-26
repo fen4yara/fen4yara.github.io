@@ -85,12 +85,12 @@
         <div style="margin-bottom: 12px;">
           <label style="display: block; margin-bottom: 8px; font-weight: 500;">Способ пополнения:</label>
           <div style="display: flex; gap: 8px;">
-            <button id="depositMethodFree" class="btn btn-secondary" style="flex: 1;">Бесплатно (1-1000 🍬)</button>
+            <button id="depositMethodFree" class="btn btn-secondary" style="flex: 1;">Бесплатно (1-1.000 🍬)</button>
             <button id="depositMethodYooMoney" class="btn btn-secondary" style="flex: 1;">YooMoney (1-50000 ₽)</button>
           </div>
         </div>
-        <p class="muted" id="depositMethodDescription">Максимум 1000 🍬 раз в час</p>
-        <input type="number" id="depositAmount" class="input-field" min="1" max="1000" placeholder="Сумма (1-1000)" />
+        <p class="muted" id="depositMethodDescription">Максимум 1.000 🍬 раз в час</p>
+        <input type="number" id="depositAmount" class="input-field" min="1" max="1000" placeholder="Сумма (1-1.000)" />
         <button id="confirmDepositBtn" class="btn-primary" style="width:100%; margin-top:12px">Пополнить</button>
         <p id="depositMessage" class="message" style="margin-top:12px"></p>
       </div>
@@ -114,6 +114,7 @@
     </div>
   </div>
 
+  <script src="script/utils.js"></script>
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
@@ -165,7 +166,7 @@
 
         user = await response.json();
         usernameEl.textContent = user.username;
-        balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
         await loadDepositStatus();
         await loadHistory();
 
@@ -192,7 +193,7 @@
         const data = await resp.json();
         if (data.status === 'success') {
           user.balance = data.balance;
-          balanceEl.textContent = user.balance;
+          balanceEl.textContent = formatCoins(user.balance);
           await loadDepositStatus();
           await loadHistory();
           alert(`Платеж успешно обработан! Баланс пополнен на ${data.amount}₽.`);
@@ -207,7 +208,7 @@
               if (checkData.status === 'success') {
                 clearInterval(checkInterval);
                 user.balance = checkData.balance;
-                balanceEl.textContent = user.balance;
+                balanceEl.textContent = formatCoins(user.balance);
                 await loadDepositStatus();
                 await loadHistory();
                 alert(`Платеж успешно обработан! Баланс пополнен на ${checkData.amount}₽.`);
@@ -271,7 +272,7 @@
             li.className = 'history-item clickable';
             const date = new Date(round.timestamp);
             const header = document.createElement('div');
-            header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${round.totalBet}🍬`;
+        header.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> → x${round.crashPoint.toFixed(2)}, пул ${formatCandy(round.totalBet)}`;
             li.append(header);
 
             const player = round.players.find((p) => p.username === user.username);
@@ -279,9 +280,9 @@
               const subUl = document.createElement('ul');
               subUl.className = 'history-players';
               const subLi = document.createElement('li');
-              let txt = `Ставка: ${player.bet}🍬`;
+              let txt = `Ставка: ${formatCandy(player.bet)}`;
               if (player.cashedOut) {
-                txt += `, забрал(а) на x${player.cashoutCoef.toFixed(2)} → выигрыш ${player.winnings}🍬`;
+                txt += `, забрал(а) на x${player.cashoutCoef.toFixed(2)} → выигрыш ${formatCandy(player.winnings)}`;
               } else {
                 txt += `, проиграл(а)`;
               }
@@ -311,14 +312,14 @@
             const ticketInfo = typeof round.winningTicket === 'number'
               ? `, билет ${round.winningTicket.toFixed(2)}`
               : '';
-            body.textContent = `Банк: ${round.totalBet} 🍬${ticketInfo}`;
+            body.textContent = `Банк: ${formatCandy(round.totalBet)}${ticketInfo}`;
             
             const player = round.players.find((p) => p.username === user.username);
             if (player) {
               const playerInfo = document.createElement('div');
               playerInfo.className = 'muted';
               playerInfo.style.marginTop = '4px';
-              playerInfo.textContent = `Твоя ставка: ${player.bet}🍬 ${round.winner === user.username ? '→ Победа!' : '→ Проигрыш'}`;
+              playerInfo.textContent = `Твоя ставка: ${formatCandy(player.bet)} ${round.winner === user.username ? '→ Победа!' : '→ Проигрыш'}`;
               body.appendChild(playerInfo);
             }
 
@@ -342,7 +343,7 @@
             const choice = entry.choice === 'tails' ? 'решка' : 'орёл';
             const resultSide = entry.result === 'tails' ? 'решка' : 'орёл';
             const net = entry.win ? entry.payout - entry.bet : -entry.bet;
-            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — выбрал ${choice}, выпал ${resultSide} ${resultText} (${net > 0 ? '+' : ''}${net}🍬)`;
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — выбрал ${choice}, выпал ${resultSide} ${resultText} (${formatSignedCandy(net)})`;
             coinflipHistoryList.appendChild(row);
           });
         }
@@ -358,7 +359,7 @@
             const date = new Date(entry.timestamp);
             const resultText = entry.win ? '→ Победа' : '→ Поражение';
             const net = entry.win ? entry.payout - entry.bet : -entry.bet;
-            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — выбрал ${entry.guess}, выпало ${entry.roll} ${resultText} (${net > 0 ? '+' : ''}${net}🍬)`;
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — выбрал ${entry.guess}, выпало ${entry.roll} ${resultText} (${formatSignedCandy(net)})`;
             diceHistoryList.appendChild(row);
           });
         }
@@ -372,7 +373,7 @@
             const row = document.createElement('div');
             row.className = 'history-item';
             const date = new Date(entry.timestamp);
-            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — +${entry.amount}🍬`;
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — ${formatSignedCandy(entry.amount)}`;
             depositHistoryList.appendChild(row);
           });
         }
@@ -416,11 +417,11 @@
       // Можно использовать ту же модалку что и в crash.html, но проще показать alert
       const date = new Date(round.timestamp).toLocaleString('ru-RU');
       const player = round.players.find((p) => p.username === user.username);
-      let info = `Краш x${round.crashPoint.toFixed(2)}\nПул: ${round.totalBet}🍬\n\n`;
+      let info = `Краш x${round.crashPoint.toFixed(2)}\nПул: ${formatCandy(round.totalBet)}\n\n`;
       if (player) {
-        info += `Твоя ставка: ${player.bet}🍬\n`;
+        info += `Твоя ставка: ${formatCandy(player.bet)}\n`;
         if (player.cashedOut) {
-          info += `Забрал(а) на x${player.cashoutCoef.toFixed(2)}\nВыигрыш: ${player.winnings}🍬`;
+          info += `Забрал(а) на x${player.cashoutCoef.toFixed(2)}\nВыигрыш: ${formatCandy(player.winnings)}`;
         } else {
           info += 'Проиграл(а)';
         }
@@ -434,9 +435,9 @@
         ? round.winningTicket.toFixed(2)
         : '—';
       const player = round.players.find((p) => p.username === user.username);
-      let info = `Победитель: ${round.winner}\nБанк: ${round.totalBet}🍬\nБилет: ${ticketInfo}\n\n`;
+      let info = `Победитель: ${round.winner}\nБанк: ${formatCandy(round.totalBet)}\nБилет: ${ticketInfo}\n\n`;
       if (player) {
-        info += `Твоя ставка: ${player.bet}🍬\n`;
+        info += `Твоя ставка: ${formatCandy(player.bet)}\n`;
         info += round.winner === user.username ? 'Победа!' : 'Проигрыш';
       }
       alert(info);
@@ -479,7 +480,7 @@
         depositMethodFree.classList.remove('btn-secondary');
         depositMethodYooMoney.classList.remove('btn-primary');
         depositMethodYooMoney.classList.add('btn-secondary');
-        depositMethodDescription.textContent = 'Максимум 1000 🍬 раз в час';
+        depositMethodDescription.textContent = 'Максимум 1.000 🍬 раз в час';
         depositAmount.min = '1';
         depositAmount.max = '1000';
         depositAmount.placeholder = 'Сумма (1-1000)';
@@ -548,10 +549,10 @@
           if (!resp.ok) {
             throw new Error(data.error || 'Ошибка пополнения');
           }
-          depositMessage.textContent = `Баланс пополнен на ${amount}🍬!`;
+          depositMessage.textContent = `Баланс пополнен на ${formatCandy(amount)}!`;
           depositMessage.className = 'message success';
           user.balance = data.newBalance;
-          balanceEl.textContent = user.balance;
+          balanceEl.textContent = formatCoins(user.balance);
           await loadDepositStatus();
           await loadHistory();
           setTimeout(() => {
@@ -603,7 +604,7 @@
                 depositMessage.textContent = `Баланс пополнен на ${credited}₽!`;
                 depositMessage.className = 'message success';
                 user.balance = checkData.balance;
-                balanceEl.textContent = user.balance;
+                balanceEl.textContent = formatCoins(user.balance);
                 await loadDepositStatus();
                 await loadHistory();
                 setTimeout(() => {
@@ -659,7 +660,7 @@
         withdrawMessage.textContent = data.message;
         withdrawMessage.className = 'message success';
         user.balance = data.balance;
-        balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
         await loadHistory();
         setTimeout(() => withdrawModal.classList.add('hidden'), 2000);
       } catch (err) {
@@ -694,7 +695,7 @@
         promocodeMessage.textContent = data.message;
         promocodeMessage.className = 'message success';
         user.balance = data.newBalance;
-        balanceEl.textContent = user.balance;
+        balanceEl.textContent = formatCoins(user.balance);
         promocodeInput.value = '';
         setTimeout(() => {
           promocodeMessage.textContent = '';

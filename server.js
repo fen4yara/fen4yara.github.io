@@ -20,9 +20,17 @@ const MAX_CRASH_HISTORY = 5;
 const MAX_ROULETTE_HISTORY = 10;
 const MAX_COINFLIP_HISTORY = 20;
 const MAX_DICE_HISTORY = 20;
+const MAX_PLINKO_HISTORY = 30;
 const MAX_DEPOSITS_FILE_RECORDS = 1000;
 const MAX_DEPOSIT_HISTORY = 20;
 const DEPOSIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 час между пополнениями
+
+const PLINKO_ROWS = [8, 9, 10, 11, 12, 13, 14, 15, 16];
+const PLINKO_RISKS = ['low', 'medium', 'high'];
+const PLINKO_RTP = { low: 0.985, medium: 0.965, high: 0.94 };
+const PLINKO_EDGE_POWER = { low: 1.1, medium: 1.35, high: 1.65 };
+const PLINKO_EDGE_BONUS = { low: 0.4, medium: 0.85, high: 1.35 };
+const plinkoMultipliersCache = new Map();
 
 // --------------- CORS ---------------
 const corsOptions = {
@@ -102,7 +110,8 @@ const ensureHistoryFileExists = () => {
       crashHistory: [],
       rouletteHistory: [],
       coinflipHistory: [],
-      diceHistory: []
+      diceHistory: [],
+      plinkoHistory: []
     };
     fs.writeFileSync(historyFile, JSON.stringify(initial, null, 2));
   }
@@ -268,6 +277,78 @@ function normalizeAmount(value) {
     return null;
   }
   return Math.round(num * 100) / 100;
+}
+
+function formatCoinsForClient(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0';
+  return num.toLocaleString('de-DE');
+}
+
+function combination(n, k) {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  k = Math.min(k, n - k);
+  let result = 1;
+  for (let i = 1; i <= k; i++) {
+    result = (result * (n - k + i)) / i;
+  }
+  return result;
+}
+
+function getPlinkoKey(risk, rows) {
+  return `${risk}_${rows}`;
+}
+
+function ensurePlinkoMultipliers(risk, rows) {
+  const safeRisk = PLINKO_RISKS.includes(risk) ? risk : 'medium';
+  const key = getPlinkoKey(safeRisk, rows);
+  if (plinkoMultipliersCache.has(key)) {
+    return plinkoMultipliersCache.get(key);
+  }
+  const buckets = rows + 1;
+  const center = rows / 2;
+  const edgePower = PLINKO_EDGE_POWER[safeRisk] || PLINKO_EDGE_POWER.medium;
+  const edgeBonus = PLINKO_EDGE_BONUS[safeRisk] || PLINKO_EDGE_BONUS.medium;
+  const raw = [];
+  for (let i = 0; i < buckets; i++) {
+    const distance = Math.abs(i - center);
+    const normalized = center === 0 ? 0 : distance / center;
+    const intensity = 1 + Math.pow(normalized, edgePower) * (1 + edgeBonus);
+    raw[i] = intensity;
+  }
+  raw[0] *= 1 + edgeBonus;
+  raw[buckets - 1] *= 1 + edgeBonus;
+
+  const probabilities = [];
+  const denominator = Math.pow(2, rows);
+  for (let i = 0; i < buckets; i++) {
+    probabilities[i] = combination(rows, i) / denominator;
+  }
+  const expectedBase = raw.reduce((sum, val, idx) => sum + val * probabilities[idx], 0);
+  const targetRtp = PLINKO_RTP[safeRisk] || PLINKO_RTP.medium;
+  const scale = expectedBase ? targetRtp / expectedBase : 1;
+  const multipliers = raw.map((val) => {
+    const scaled = Math.max(0.1, val * scale);
+    return Number(scaled.toFixed(2));
+  });
+  plinkoMultipliersCache.set(key, multipliers);
+  return multipliers;
+}
+
+function buildPlinkoConfig() {
+  const multipliers = {};
+  PLINKO_RISKS.forEach((risk) => {
+    multipliers[risk] = {};
+    PLINKO_ROWS.forEach((rows) => {
+      multipliers[risk][rows] = ensurePlinkoMultipliers(risk, rows);
+    });
+  });
+  return {
+    risks: PLINKO_RISKS,
+    rows: PLINKO_ROWS,
+    multipliers
+  };
 }
 
 function normalizeTextToken(value) {
@@ -501,6 +582,9 @@ function readHistoryStore() {
 }
 
 function writeHistoryStore(store) {
+  fs.writeFileSync(historyFile, JSON.stringify(store, null, 2));
+}
+
 function collectUserGameHistory(username) {
   const crash = crashHistory.filter(
     (round) => Array.isArray(round.players) && round.players.some((p) => p.username === username)
@@ -510,9 +594,8 @@ function collectUserGameHistory(username) {
   );
   const coinflip = coinflipHistory.filter((entry) => entry.username === username);
   const dice = diceHistory.filter((entry) => entry.username === username);
-  return { crash, roulette, coinflip, dice };
-}
-  fs.writeFileSync(historyFile, JSON.stringify(store, null, 2));
+  const plinko = plinkoHistory.filter((entry) => entry.username === username);
+  return { crash, roulette, coinflip, dice, plinko };
 }
 
 function readUsers() {
@@ -1149,6 +1232,7 @@ app.get('/profile/history', (req, res) => {
   );
   const userCoinflip = coinflipHistory.filter((entry) => entry.username === username);
   const userDice = diceHistory.filter((entry) => entry.username === username);
+  const userPlinko = plinkoHistory.filter((entry) => entry.username === username);
   const withdrawals = readWithdrawals().filter((w) => w.username === username);
   const { userDeposits } = getUserDepositsMeta(username);
   res.json({
@@ -1156,6 +1240,7 @@ app.get('/profile/history', (req, res) => {
     roulette: userRoulette,
     coinflip: userCoinflip,
     dice: userDice,
+    plinko: userPlinko,
     deposits: userDeposits,
     withdrawals
   });
@@ -1233,6 +1318,7 @@ let crashHistory = [];
 let lastCrashResult = null;
 let coinflipHistory = [];
 let diceHistory = [];
+let plinkoHistory = [];
 
 (() => {
   const store = readHistoryStore();
@@ -1241,16 +1327,19 @@ let diceHistory = [];
   const rawCrash = Array.isArray(store.crashHistory) ? store.crashHistory : [];
   const rawCoinflip = Array.isArray(store.coinflipHistory) ? store.coinflipHistory : [];
   const rawDice = Array.isArray(store.diceHistory) ? store.diceHistory : [];
+  const rawPlinko = Array.isArray(store.plinkoHistory) ? store.plinkoHistory : [];
   rouletteHistory = rawRoulette.slice(0, MAX_ROULETTE_HISTORY);
   crashHistory = rawCrash.slice(0, MAX_CRASH_HISTORY);
   coinflipHistory = rawCoinflip.slice(0, MAX_COINFLIP_HISTORY);
   diceHistory = rawDice.slice(0, MAX_DICE_HISTORY);
+  plinkoHistory = rawPlinko.slice(0, MAX_PLINKO_HISTORY);
   needsPersist =
     needsPersist ||
     rawRoulette.length !== rouletteHistory.length ||
     rawCrash.length !== crashHistory.length ||
     rawCoinflip.length !== coinflipHistory.length ||
-    rawDice.length !== diceHistory.length;
+    rawDice.length !== diceHistory.length ||
+    rawPlinko.length !== plinkoHistory.length;
   if (rouletteHistory.length) {
     lastSpinResult = rouletteHistory[0];
   }
@@ -1258,7 +1347,7 @@ let diceHistory = [];
     lastCrashResult = crashHistory[0];
   }
   if (needsPersist) {
-    writeHistoryStore({ crashHistory, rouletteHistory, coinflipHistory, diceHistory });
+    writeHistoryStore({ crashHistory, rouletteHistory, coinflipHistory, diceHistory, plinkoHistory });
   }
 })();
 
@@ -1267,7 +1356,8 @@ function persistHistory() {
     crashHistory,
     rouletteHistory,
     coinflipHistory,
-    diceHistory
+    diceHistory,
+    plinkoHistory
   });
 }
 
@@ -1861,6 +1951,101 @@ app.post('/dice/play', (req, res) => {
   });
 });
 
+// ======= Плинко =======
+app.get('/plinko/config', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  res.json(buildPlinkoConfig());
+});
+
+app.get('/plinko/history', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  res.json(plinkoHistory);
+});
+
+app.post('/plinko/play', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const payload = req.body || {};
+  const bet = Number(payload.bet);
+  const riskRaw = typeof payload.risk === 'string' ? payload.risk.toLowerCase() : 'medium';
+  const rowsInt = Number(payload.rows) || 12;
+
+  if (!bet || !Number.isFinite(bet) || bet <= 0) {
+    return res.status(400).json({ error: 'Некорректная ставка' });
+  }
+  if (!PLINKO_ROWS.includes(rowsInt)) {
+    return res.status(400).json({ error: 'Недопустимое количество рядов' });
+  }
+  const risk = PLINKO_RISKS.includes(riskRaw) ? riskRaw : 'medium';
+
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.balance < bet) {
+    return res.status(400).json({ error: 'Недостаточно средств' });
+  }
+
+  const balanceAfterBet = user.balance - bet;
+  updateUserBalance(username, balanceAfterBet);
+
+  const multipliers = ensurePlinkoMultipliers(risk, rowsInt);
+  let currentX = rowsInt / 2;
+  let rightsCount = 0;
+  const path = [currentX];
+  for (let i = 0; i < rowsInt; i++) {
+    const goRight = Math.random() >= 0.5;
+    if (goRight) {
+      rightsCount += 1;
+      currentX += 0.5;
+    } else {
+      currentX -= 0.5;
+    }
+    path.push(currentX);
+  }
+
+  const bucketIndex = Math.min(Math.max(rightsCount, 0), multipliers.length - 1);
+  const multiplier = multipliers[bucketIndex] || 0;
+  const payout = multiplier > 0 ? Math.floor(bet * multiplier) : 0;
+  let finalBalance = balanceAfterBet;
+  if (payout > 0) {
+    finalBalance += payout;
+    updateUserBalance(username, finalBalance);
+  }
+
+  const entry = {
+    username,
+    bet,
+    risk,
+    rows: rowsInt,
+    multiplier,
+    payout,
+    bucket: bucketIndex,
+    path,
+    timestamp: Date.now()
+  };
+  plinkoHistory.unshift(entry);
+  if (plinkoHistory.length > MAX_PLINKO_HISTORY) plinkoHistory.pop();
+  persistHistory();
+
+  res.json({
+    multiplier,
+    payout,
+    bucket: bucketIndex,
+    path,
+    risk,
+    rows: rowsInt,
+    newBalance: finalBalance,
+    history: plinkoHistory
+  });
+});
+
 // ======= Промокоды =======
 app.post('/promocode/activate', (req, res) => {
   if (!req.session.user) {
@@ -1905,7 +2090,7 @@ app.post('/promocode/activate', (req, res) => {
   updateUserBalance(username, newBalance);
 
   res.json({
-    message: `Промокод активирован! Получено ${promocode.reward}🍬`,
+    message: `Промокод активирован! Получено ${formatCoinsForClient(promocode.reward)}🍬`,
     reward: promocode.reward,
     newBalance
   });

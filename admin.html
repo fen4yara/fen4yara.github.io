@@ -148,6 +148,7 @@
     </div>
   </div>
 
+  <script src="script/utils.js"></script>
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     const adminLoginSection = document.getElementById('adminLoginSection');
@@ -207,7 +208,7 @@
         const isBanned = banned === true;
         tr.innerHTML = `
           <td>${username}</td>
-          <td>${balance} 🍬</td>
+          <td>${formatCandy(balance)}</td>
           <td>
             <button class="btn-${isBanned ? 'primary' : 'outline'}" data-username="${username}" data-action="toggle-ban" style="width:auto; font-size:0.85rem">
               ${isBanned ? '🔓 Разблокировать' : '🔒 Заблокировать'}
@@ -350,10 +351,10 @@
           if (!resp.ok) {
             throw new Error(data.error || 'Не удалось сохранить');
           }
-          adminPanelMessage.textContent = `Баланс ${data.username} обновлён: ${data.balance} 🍬`;
+          adminPanelMessage.textContent = `Баланс ${data.username} обновлён: ${formatCandy(data.balance)}`;
           adminPanelMessage.className = 'message success';
           input.value = data.balance;
-          input.parentElement.previousElementSibling.previousElementSibling.textContent = `${data.balance} 🍬`;
+          input.parentElement.previousElementSibling.previousElementSibling.textContent = `${formatCandy(data.balance)}`;
           const users = await fetchUsers();
           renderUsers(users);
         } catch (err) {
@@ -413,7 +414,7 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${p.code}</td>
-          <td>${p.reward} 🍬</td>
+          <td>${formatCandy(p.reward)}</td>
           <td>${p.activationsLeft}</td>
           <td><button class="btn-danger" data-code="${p.code}" data-action="delete-promocode" style="width:auto; font-size:0.85rem">Удалить</button></td>
         `;
@@ -473,11 +474,11 @@
       const { user, deposits, yoomoneyPayments, withdrawals, games } = data;
       const formatDate = (ts) => new Date(ts).toLocaleString('ru-RU');
       userProfileContent.innerHTML = `
-        <div class="history-item"><strong>${user.username}</strong> · баланс ${user.balance} 🍬 ${user.banned ? '(заблокирован)' : ''}<br/>IP: ${user.ip || '—'}</div>
+        <div class="history-item"><strong>${user.username}</strong> · баланс ${formatCandy(user.balance)} ${user.banned ? '(заблокирован)' : ''}<br/>IP: ${user.ip || '—'}</div>
         <h3>Пополнения</h3>
         ${renderSimpleList(
           deposits.slice(-10).reverse(),
-          (d) => `<li>${formatDate(d.timestamp)} · +${d.amount} 🍬 (${d.method || 'free'})</li>`,
+          (d) => `<li>${formatDate(d.timestamp)} · ${formatSignedCandy(d.amount)} (${d.method || 'free'})</li>`,
           'Нет пополнений'
         )}
         <h3>YooMoney платежи</h3>
@@ -494,7 +495,11 @@
         )}
         <h3>Игры</h3>
         <div class="history-item">
-          <strong>Краш:</strong> ${games.crash.length} · <strong>Рулетка:</strong> ${games.roulette.length} · <strong>Коинфлип:</strong> ${games.coinflip.length} · <strong>Дайс:</strong> ${games.dice.length}
+          <strong>Краш:</strong> ${games.crash.length}
+          · <strong>Рулетка:</strong> ${games.roulette.length}
+          · <strong>Коинфлип:</strong> ${games.coinflip.length}
+          · <strong>Дайс:</strong> ${games.dice.length}
+          · <strong>Плинко:</strong> ${games.plinko.length}
         </div>
       `;
       userProfileModal.classList.remove('hidden');
