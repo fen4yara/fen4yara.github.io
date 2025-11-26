@@ -2,9 +2,11 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const session = require('express-session');
 const cors = require('cors');
 const {
+  API: YooMoneyAPI,
   YMPaymentFormBuilder,
   YMNotificationChecker,
   YMNotificationError
@@ -58,8 +60,17 @@ const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.jso
 
 // YooMoney конфигурация
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
-const YOOMONEY_NOTIFICATION_SECRET = process.env.YOOMONEY_NOTIFICATION_SECRET || 'replace_with_real_secret';
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://fen4yaragithubio-production.up.railway.app';
+const YOOMONEY_NOTIFICATION_SECRET =
+  process.env.YOOMONEY_NOTIFICATION_SECRET || 'replace_with_real_secret';
+const PUBLIC_BASE_URL =
+  process.env.PUBLIC_BASE_URL || 'https://fen4yaragithubio-production.up.railway.app';
+const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '';
+const PAYMENT_TTL_MINUTES = Number(process.env.YOOMONEY_PAYMENT_TTL_MINUTES || 30);
+const YOOMONEY_PAYMENT_TTL_MS =
+  Number.isFinite(PAYMENT_TTL_MINUTES) && PAYMENT_TTL_MINUTES > 0
+    ? PAYMENT_TTL_MINUTES * 60 * 1000
+    : 30 * 60 * 1000;
+const yoomoneyApiClient = YOOMONEY_ACCESS_TOKEN ? new YooMoneyAPI(YOOMONEY_ACCESS_TOKEN) : null;
 const notificationChecker = new YMNotificationChecker(YOOMONEY_NOTIFICATION_SECRET);
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data'); 
@@ -210,6 +221,114 @@ function writeYooMoneyPayments(arr) {
   } catch (err) {
     console.error('Ошибка записи yoomoney-payments.json:', err);
     throw err;
+  }
+}
+
+function normalizeAmount(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  return Math.round(num * 100) / 100;
+}
+
+function generatePaymentId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `ym_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildPaymentLabel(username, paymentId) {
+  return `fen4:${username}:${paymentId}`;
+}
+
+function findPaymentById(payments, paymentId) {
+  return payments.find((p) => p.paymentId === paymentId);
+}
+
+function findPaymentByLabel(payments, label) {
+  return payments.find((p) => p.label === label);
+}
+
+function applyDepositFromPayment(payment, amount, operationId) {
+  const user = findUser(payment.username);
+  if (!user) {
+    console.warn(`YooMoney: пользователь ${payment.username} не найден для платежа ${payment.paymentId}`);
+    return null;
+  }
+  const newBalance = user.balance + amount;
+  updateUserBalance(payment.username, newBalance);
+
+  const deposits = readDeposits();
+  deposits.push({
+    username: payment.username,
+    amount,
+    timestamp: Date.now(),
+    method: 'yoomoney',
+    paymentId: payment.paymentId,
+    operationId
+  });
+  if (deposits.length > MAX_DEPOSITS_FILE_RECORDS) {
+    deposits.splice(0, deposits.length - MAX_DEPOSITS_FILE_RECORDS);
+  }
+  writeDeposits(deposits);
+  return newBalance;
+}
+
+function finalizeYooMoneyPayment(payment, payments, details = {}) {
+  const paidAmount = normalizeAmount(details.paidAmount ?? payment.amount);
+  if (paidAmount === null) {
+    throw new Error('YooMoney: некорректная сумма платежа');
+  }
+
+  payment.status = 'success';
+  payment.paidAmount = paidAmount;
+  payment.operationId = details.operationId || payment.operationId || null;
+  payment.confirmationSource = details.source || 'webhook';
+  payment.confirmedAt = Date.now();
+  if (details.payload) {
+    payment.lastPayload = details.payload;
+  }
+  applyDepositFromPayment(payment, paidAmount, payment.operationId);
+  writeYooMoneyPayments(payments);
+  return paidAmount;
+}
+
+async function trySyncPaymentWithAPI(payment, payments) {
+  if (!yoomoneyApiClient || payment.status !== 'pending') {
+    return false;
+  }
+  try {
+    const history = await yoomoneyApiClient.operationHistory({
+      label: payment.label,
+      records: 20
+    });
+    const operations = Array.isArray(history.operations) ? history.operations : [];
+    const match = operations.find((op) => {
+      if (!op || op.label !== payment.label) {
+        return false;
+      }
+      const directionOk = op.direction ? String(op.direction).toLowerCase() === 'in' : true;
+      const statusOk = op.status ? String(op.status).toLowerCase() === 'success' : true;
+      return directionOk && statusOk;
+    });
+    if (!match) {
+      return false;
+    }
+    const paidAmount = normalizeAmount(match.amount || match.sum || match.amount_due);
+    if (paidAmount === null || Math.abs(paidAmount - payment.amount) > 0.01) {
+      return false;
+    }
+    finalizeYooMoneyPayment(payment, payments, {
+      paidAmount,
+      operationId: match.operation_id || match.operationId || `api_${Date.now()}`,
+      source: 'api_history'
+    });
+    return true;
+  } catch (err) {
+    console.error('YooMoney API sync failed:', err.message || err);
+    return false;
   }
 }
 
@@ -513,12 +632,12 @@ app.post('/profile/deposit', (req, res) => {
 });
 
 // ======= YooMoney пополнение =======
-app.post('/profile/yoomoney/create', async (req, res) => {
+app.post('/profile/yoomoney/create', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
-  const amount = Number(req.body.amount);
-  if (!Number.isFinite(amount) || amount < 1 || amount > 50000) {
+  const amount = normalizeAmount(req.body.amount);
+  if (amount === null || amount < 1 || amount > 50000) {
     return res.status(400).json({ error: 'Сумма должна быть от 1 до 50000 рублей' });
   }
 
@@ -532,10 +651,11 @@ app.post('/profile/yoomoney/create', async (req, res) => {
   }
 
   try {
-    const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const label = `balance:${username}:${paymentId}`;
+    const paymentId = generatePaymentId();
+    const label = buildPaymentLabel(username, paymentId);
+    const createdAt = Date.now();
+    const expiresAt = createdAt + YOOMONEY_PAYMENT_TTL_MS;
 
-    // Сохраняем информацию о платеже
     const payments = readYooMoneyPayments();
     payments.push({
       paymentId,
@@ -543,13 +663,16 @@ app.post('/profile/yoomoney/create', async (req, res) => {
       amount,
       label,
       status: 'pending',
-      createdAt: Date.now()
+      createdAt,
+      expiresAt,
+      currency: 'RUB'
     });
     writeYooMoneyPayments(payments);
 
     res.json({
       paymentId,
-      paymentUrl: `${PUBLIC_BASE_URL}/profile/yoomoney/pay/${paymentId}`
+      paymentUrl: `${PUBLIC_BASE_URL}/profile/yoomoney/pay/${paymentId}`,
+      expiresAt
     });
   } catch (error) {
     console.error('Ошибка создания платежа YooMoney:', error);
@@ -561,10 +684,21 @@ app.post('/profile/yoomoney/create', async (req, res) => {
 app.get('/profile/yoomoney/pay/:paymentId', (req, res) => {
   const { paymentId } = req.params;
   const payments = readYooMoneyPayments();
-  const payment = payments.find((p) => p.paymentId === paymentId);
+  const payment = findPaymentById(payments, paymentId);
 
   if (!payment) {
     return res.status(404).send('Платеж не найден');
+  }
+
+  if (payment.status !== 'pending') {
+    return res.status(400).send('Платеж уже обработан');
+  }
+
+  if (payment.expiresAt && payment.expiresAt < Date.now()) {
+    payment.status = 'expired';
+    payment.expiredAt = Date.now();
+    writeYooMoneyPayments(payments);
+    return res.status(410).send('Срок действия платежа истёк');
   }
 
   const builder = new YMPaymentFormBuilder({
@@ -588,56 +722,59 @@ app.get('/profile/yoomoney/pay/:paymentId', (req, res) => {
 app.post(
   '/profile/yoomoney/webhook',
   express.urlencoded({ extended: true }),
-  notificationChecker.middleware({ memo: false }, (req, res) => {
+  notificationChecker.middleware({ memo: true }, (req, res) => {
     const { label, amount, operation_id } = req.body;
+    const incomingLabel = String(label || '').trim();
     const payments = readYooMoneyPayments();
-    const payment = payments.find((p) => {
-      const paymentLabel = String(p.label).trim();
-      const incomingLabel = String(label || '').trim();
-      return (
-        paymentLabel === incomingLabel ||
-        incomingLabel.includes(p.paymentId) ||
-        paymentLabel.includes(incomingLabel)
-      );
-    });
+    const payment = findPaymentByLabel(payments, incomingLabel);
 
     if (!payment) {
-      console.warn(`YooMoney webhook: платеж с label "${label}" не найден`);
-      return res.status(200).send('IGNORED');
+      console.warn(`YooMoney webhook: платеж с label "${incomingLabel}" не найден`);
+      return res.status(200).send('UNKNOWN_PAYMENT');
     }
 
     if (payment.status !== 'pending') {
       return res.status(200).send('ALREADY_PROCESSED');
     }
 
-    payment.status = 'success';
-    payment.operationId = operation_id || `operation_${Date.now()}`;
-    payment.completedAt = Date.now();
-    writeYooMoneyPayments(payments);
-
-    const user = findUser(payment.username);
-    if (user) {
-      const updatedBalance = user.balance + payment.amount;
-      updateUserBalance(payment.username, updatedBalance);
-
-      const allDeposits = readDeposits();
-      allDeposits.push({
-        username: payment.username,
-        amount: payment.amount,
-        timestamp: Date.now(),
-        method: 'yoomoney',
-        paymentId: payment.paymentId
-      });
-      if (allDeposits.length > MAX_DEPOSITS_FILE_RECORDS) {
-        allDeposits.splice(0, allDeposits.length - MAX_DEPOSITS_FILE_RECORDS);
-      }
-      writeDeposits(allDeposits);
-      console.log(
-        `✅ Платеж ${payment.paymentId} подтвержден через webhook на сумму ${payment.amount}`
-      );
+    if (payment.expiresAt && payment.expiresAt < Date.now()) {
+      payment.status = 'expired';
+      payment.expiredAt = Date.now();
+      writeYooMoneyPayments(payments);
+      return res.status(200).send('EXPIRED');
     }
 
-    res.status(200).send('OK');
+    const paidAmount = normalizeAmount(amount);
+    if (paidAmount === null) {
+      return res.status(400).send('INVALID_AMOUNT');
+    }
+
+    if (Math.abs(paidAmount - payment.amount) > 0.01) {
+      payment.status = 'amount_mismatch';
+      payment.failureReason = `Ожидалось ${payment.amount}, получили ${paidAmount}`;
+      payment.mismatchPayload = req.body;
+      writeYooMoneyPayments(payments);
+      console.warn(
+        `YooMoney webhook: несоответствие суммы для ${payment.paymentId} (${paidAmount} вместо ${payment.amount})`
+      );
+      return res.status(400).send('AMOUNT_MISMATCH');
+    }
+
+    try {
+      finalizeYooMoneyPayment(payment, payments, {
+        paidAmount,
+        operationId: operation_id || `operation_${Date.now()}`,
+        source: 'webhook',
+        payload: req.body
+      });
+      console.log(
+        `✅ Платеж ${payment.paymentId} подтвержден через webhook на сумму ${paidAmount}`
+      );
+      return res.status(200).send('OK');
+    } catch (err) {
+      console.error('Ошибка обработки платежа YooMoney:', err);
+      return res.status(500).send('ERROR');
+    }
   })
 );
 
@@ -657,18 +794,40 @@ app.get('/profile/yoomoney/check/:paymentId', async (req, res) => {
   }
 
   const { paymentId } = req.params;
-  let payments = readYooMoneyPayments();
-  let payment = payments.find(p => p.paymentId === paymentId && p.username === req.session.user.username);
+  const payments = readYooMoneyPayments();
+  const payment = findPaymentById(payments, paymentId);
 
-  if (!payment) {
+  if (!payment || payment.username !== req.session.user.username) {
     return res.status(404).json({ error: 'Платеж не найден' });
+  }
+
+  let shouldPersist = false;
+  if (payment.status === 'pending') {
+    if (payment.expiresAt && payment.expiresAt < Date.now()) {
+      payment.status = 'expired';
+      payment.expiredAt = Date.now();
+      shouldPersist = true;
+    } else {
+      const synced = await trySyncPaymentWithAPI(payment, payments);
+      if (synced) {
+        // финализация уже сохранила данные
+        shouldPersist = false;
+      }
+    }
+  }
+
+  if (shouldPersist && payment.status !== 'success') {
+    writeYooMoneyPayments(payments);
   }
 
   const user = findUser(req.session.user.username);
   res.json({
-    status: payment ? payment.status : 'pending',
-    amount: payment ? payment.amount : 0,
-    balance: user ? user.balance : 0
+    status: payment.status,
+    amount: payment.amount,
+    paidAmount: payment.paidAmount || null,
+    balance: user ? user.balance : 0,
+    expiresAt: payment.expiresAt || null,
+    confirmedAt: payment.confirmedAt || null
   });
 });
 
