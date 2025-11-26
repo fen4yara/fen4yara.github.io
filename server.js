@@ -1461,6 +1461,9 @@ app.post('/roulette/join', (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'Пользователь не найден' });
   }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
+  }
   if (user.balance < bet) {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
@@ -1681,6 +1684,9 @@ app.post('/crash/join', (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'Пользователь не найден' });
   }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
+  }
   if (user.balance < bet) {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
@@ -1830,6 +1836,9 @@ app.post('/coinflip/play', (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'Пользователь не найден' });
   }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
+  }
   if (user.balance < bet) {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
@@ -1897,6 +1906,9 @@ app.post('/dice/play', (req, res) => {
   const user = findUser(username);
   if (!user) {
     return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
   }
   if (user.balance < bet) {
     return res.status(400).json({ error: 'Недостаточно средств' });
@@ -1987,6 +1999,9 @@ app.post('/plinko/play', (req, res) => {
   const user = findUser(username);
   if (!user) {
     return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
   }
   if (user.balance < bet) {
     return res.status(400).json({ error: 'Недостаточно средств' });

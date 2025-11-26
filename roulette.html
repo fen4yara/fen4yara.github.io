@@ -440,20 +440,16 @@
       showMessage('Крутим…');
 
       const slices = computeSlices(spinPlayers);
-      let targetSlice = slices.find(s => s.username === winnerUsername);
-      if (!targetSlice) targetSlice = slices[0];
 
+      const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0) || 1;
       const winningTicket = typeof resultData.winningTicket === 'number'
         ? resultData.winningTicket
-        : targetSlice.ticketStart + targetSlice.bet / 2;
-      const sliceWidth = targetSlice.endAngle - targetSlice.startAngle;
-      const ticketRange = Math.max(0.0001, targetSlice.ticketEnd - targetSlice.ticketStart);
-      const ticketOffset = Math.min(
-        Math.max(winningTicket - targetSlice.ticketStart, 0),
-        ticketRange
-      );
-      const ticketRatio = ticketOffset / ticketRange;
-      const targetAngle = targetSlice.startAngle + sliceWidth * ticketRatio;
+        : totalBet / 2;
+      const clampedTicket = Math.min(Math.max(winningTicket, 0), totalBet);
+      const ticketRatio = clampedTicket / totalBet;
+
+      // Угол билета на колесе: 0 билетов = верх (указатель), далее по часовой
+      const targetAngle = -Math.PI / 2 + ticketRatio * 2 * Math.PI;
 
       const minTurns = 4;
       const maxTurns = 7;
