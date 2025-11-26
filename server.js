@@ -62,10 +62,11 @@ const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.jso
 // YooMoney конфигурация
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
 const YOOMONEY_NOTIFICATION_SECRET =
-  process.env.YOOMONEY_NOTIFICATION_SECRET || 'efXxjdKBau2tSeN6tiNOq9Yy';
+  process.env.YOOMONEY_NOTIFICATION_SECRET || 'replace_with_real_secret';
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || 'https://fen4yaragithubio-production.up.railway.app';
-const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '4DE7164E17CF3B03665854D098FF869341D04A144FBA46B5047F0B7EE86DBC09';
+const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '';
+const YOOMONEY_PAYMENT_TYPE = (process.env.YOOMONEY_PAYMENT_TYPE || 'AC').toUpperCase();
 if (!YOOMONEY_RECEIVER || !YOOMONEY_NOTIFICATION_SECRET) {
   console.warn('⚠️ YooMoney env vars are missing. Check receiver and notification secret.');
 }
@@ -75,6 +76,11 @@ const YOOMONEY_PAYMENT_TTL_MS =
     ? PAYMENT_TTL_MINUTES * 60 * 1000
     : 30 * 60 * 1000;
 const yoomoneyApiClient = YOOMONEY_ACCESS_TOKEN ? new YooMoneyAPI(YOOMONEY_ACCESS_TOKEN) : null;
+const YOOMONEY_AMOUNT_TOLERANCE = Number(process.env.YOOMONEY_AMOUNT_TOLERANCE || 0.1);
+const YOOMONEY_COMMISSION_RULES = {
+  AC: { mode: 'from_sum', rate: 0.03 }, // комиссия удерживается из суммы списания
+  PC: { mode: 'from_amount_due', rate: 0.01 } // комиссия удерживается из суммы к получению
+};
 const notificationChecker = new YMNotificationChecker(YOOMONEY_NOTIFICATION_SECRET);
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data'); 
@@ -240,6 +246,28 @@ function normalizeTextToken(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function amountsClose(expected, actual, tolerance = YOOMONEY_AMOUNT_TOLERANCE) {
+  if (expected === null || actual === null) {
+    return false;
+  }
+  return Math.abs(expected - actual) <= tolerance;
+}
+
+function getCommissionRule(paymentType = YOOMONEY_PAYMENT_TYPE) {
+  return YOOMONEY_COMMISSION_RULES[paymentType] || YOOMONEY_COMMISSION_RULES.AC;
+}
+
+function calculatePayableAmount(targetAmount, paymentType = YOOMONEY_PAYMENT_TYPE) {
+  const rule = getCommissionRule(paymentType);
+  let payable = targetAmount;
+  if (rule.mode === 'from_sum') {
+    payable = targetAmount / (1 - rule.rate);
+  } else if (rule.mode === 'from_amount_due') {
+    payable = targetAmount * (1 + rule.rate);
+  }
+  return normalizeAmount(payable);
+}
+
 function generatePaymentId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -300,7 +328,8 @@ function operationMatchesPayment(operation, payment) {
   if (paidAmount === null) {
     return false;
   }
-  if (Math.abs(paidAmount - payment.amount) > 0.01) {
+  const expectedPaid = payment.payableAmount ?? payment.amount;
+  if (!amountsClose(expectedPaid, paidAmount)) {
     return false;
   }
   const labelMatch =
@@ -336,9 +365,14 @@ function applyDepositFromPayment(payment, amount, operationId) {
 }
 
 function finalizeYooMoneyPayment(payment, payments, details = {}) {
-  const paidAmount = normalizeAmount(details.paidAmount ?? payment.amount);
+  const paidAmount = normalizeAmount(details.paidAmount ?? payment.payableAmount ?? payment.amount);
   if (paidAmount === null) {
     throw new Error('YooMoney: некорректная сумма платежа');
+  }
+  const expectedCredit = payment.expectedCredit ?? payment.amount;
+  const creditedAmountRaw = normalizeAmount(details.creditAmount ?? expectedCredit);
+  if (creditedAmountRaw === null) {
+    throw new Error('YooMoney: некорректная сумма зачисления');
   }
 
   payment.status = 'success';
@@ -346,10 +380,11 @@ function finalizeYooMoneyPayment(payment, payments, details = {}) {
   payment.operationId = details.operationId || payment.operationId || null;
   payment.confirmationSource = details.source || 'webhook';
   payment.confirmedAt = Date.now();
+  payment.creditedAmount = creditedAmountRaw;
   if (details.payload) {
     payment.lastPayload = details.payload;
   }
-  applyDepositFromPayment(payment, paidAmount, payment.operationId);
+  applyDepositFromPayment(payment, creditedAmountRaw, payment.operationId);
   writeYooMoneyPayments(payments);
   return paidAmount;
 }
@@ -388,6 +423,7 @@ async function trySyncPaymentWithAPI(payment, payments) {
       }
       finalizeYooMoneyPayment(payment, payments, {
         paidAmount,
+      creditAmount: payment.expectedCredit ?? payment.amount,
         operationId: match.operation_id || match.operationId || `api_${Date.now()}`,
         source: 'api_history',
         payload: match
@@ -737,12 +773,18 @@ app.post('/profile/yoomoney/create', (req, res) => {
     const label = buildPaymentLabel(username, paymentId);
     const createdAt = Date.now();
     const expiresAt = createdAt + YOOMONEY_PAYMENT_TTL_MS;
+    const payableAmount = calculatePayableAmount(amount, YOOMONEY_PAYMENT_TYPE);
+    const commissionRule = getCommissionRule(YOOMONEY_PAYMENT_TYPE);
 
     const payments = readYooMoneyPayments();
     payments.push({
       paymentId,
       username,
       amount,
+      expectedCredit: amount,
+      payableAmount,
+      paymentType: YOOMONEY_PAYMENT_TYPE,
+      commissionRate: commissionRule.rate,
       label,
       status: 'pending',
       createdAt,
@@ -754,7 +796,10 @@ app.post('/profile/yoomoney/create', (req, res) => {
     res.json({
       paymentId,
       paymentUrl: `${PUBLIC_BASE_URL}/profile/yoomoney/pay/${paymentId}`,
-      expiresAt
+      expiresAt,
+      payableAmount,
+      paymentType: YOOMONEY_PAYMENT_TYPE,
+      amount
     });
   } catch (error) {
     console.error('Ошибка создания платежа YooMoney:', error);
@@ -787,7 +832,7 @@ app.get('/profile/yoomoney/pay/:paymentId', (req, res) => {
 
   const builder = new YMPaymentFormBuilder({
     receiver: YOOMONEY_RECEIVER,
-    sum: Number(payment.amount).toFixed(2),
+    sum: Number(payment.payableAmount ?? payment.amount).toFixed(2),
     label: payment.label,
     successURL: `${PUBLIC_BASE_URL}/profile.html?payment=${payment.paymentId}`,
     targets: `Пополнение баланса ${payment.username} ${paymentTag}`,
@@ -841,20 +886,18 @@ app.post(
       return res.status(400).send('INVALID_AMOUNT');
     }
 
-    if (Math.abs(paidAmount - payment.amount) > 0.01) {
-      payment.status = 'amount_mismatch';
-      payment.failureReason = `Ожидалось ${payment.amount}, получили ${paidAmount}`;
-      payment.mismatchPayload = req.body;
-      writeYooMoneyPayments(payments);
+    const expectedPayable = payment.payableAmount ?? payment.amount;
+    let creditAmount = payment.expectedCredit ?? payment.amount;
+    if (!amountsClose(expectedPayable, paidAmount)) {
       console.warn(
-        `YooMoney webhook: несоответствие суммы для ${payment.paymentId} (${paidAmount} вместо ${payment.amount})`
+        `YooMoney webhook: сумма ${paidAmount} отличается от ожидаемой ${expectedPayable} для ${payment.paymentId}`
       );
-      return res.status(400).send('AMOUNT_MISMATCH');
     }
 
     try {
       finalizeYooMoneyPayment(payment, payments, {
         paidAmount,
+        creditAmount,
         operationId: operation_id || `operation_${Date.now()}`,
         source: 'webhook',
         payload: req.body
@@ -916,6 +959,7 @@ app.get('/profile/yoomoney/check/:paymentId', async (req, res) => {
   res.json({
     status: payment.status,
     amount: payment.amount,
+    payableAmount: payment.payableAmount || payment.amount,
     paidAmount: payment.paidAmount || null,
     balance: user ? user.balance : 0,
     expiresAt: payment.expiresAt || null,

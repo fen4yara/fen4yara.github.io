@@ -495,9 +495,10 @@
           if (!resp.ok) {
             throw new Error(data.error || 'Ошибка создания платежа');
           }
+          const payableAmount = data.payableAmount || amount;
           // Открываем ссылку на оплату
           window.open(data.paymentUrl, '_blank');
-          depositMessage.textContent = 'Перейдите по ссылке для оплаты. После оплаты баланс будет пополнен автоматически.';
+          depositMessage.textContent = `Перейдите по ссылке и оплатите ${payableAmount}₽. На баланс будет зачислено ${data.amount || amount}₽ после подтверждения YooMoney.`;
           depositMessage.className = 'message success';
           // Проверяем статус платежа каждые 5 секунд
           const checkInterval = setInterval(async () => {
@@ -508,7 +509,8 @@
               const checkData = await checkResp.json();
               if (checkData.status === 'success') {
                 clearInterval(checkInterval);
-                depositMessage.textContent = `Баланс пополнен на ${amount}₽!`;
+                const credited = checkData.amount || amount;
+                depositMessage.textContent = `Баланс пополнен на ${credited}₽!`;
                 depositMessage.className = 'message success';
                 user.balance = checkData.balance;
                 balanceEl.textContent = user.balance;
