@@ -53,7 +53,8 @@ app.use(express.static(path.join(__dirname)));
 
 const usersFile = path.join(__dirname, 'data', 'users.json');
 const historyFile = path.join(__dirname, 'data', 'history.json');
-const depositsFile = path.join(__dirname, 'data', 'deposits.json');
+const depositsFile
+ = path.join(__dirname, 'data', 'deposits.json');
 const promocodesFile = path.join(__dirname, 'data', 'promocodes.json');
 const promocodeUsageFile = path.join(__dirname, 'data', 'promocode-usage.json');
 const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.json');
@@ -232,6 +233,10 @@ function normalizeAmount(value) {
   return Math.round(num * 100) / 100;
 }
 
+function normalizeTextToken(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function generatePaymentId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -249,6 +254,57 @@ function findPaymentById(payments, paymentId) {
 
 function findPaymentByLabel(payments, label) {
   return payments.find((p) => p.label === label);
+}
+
+function extractOperationAmount(operation) {
+  if (!operation || typeof operation !== 'object') {
+    return null;
+  }
+  const candidates = [operation.amount, operation.amount_due, operation.withdraw_amount];
+  for (const candidate of candidates) {
+    const normalized = normalizeAmount(candidate);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function operationContainsPaymentTag(operation, payment) {
+  if (!operation || !payment) return false;
+  const tagCandidates = [
+    payment.paymentId,
+    payment.label,
+    normalizeTextToken(payment.operationId)
+  ].filter(Boolean);
+  if (!tagCandidates.length) {
+    return false;
+  }
+  const fields = [
+    operation.label,
+    operation.comment,
+    operation.message,
+    operation.details,
+    operation.title
+  ];
+  return tagCandidates.some((tag) =>
+    fields.some((field) => typeof field === 'string' && field.includes(tag))
+  );
+}
+
+function operationMatchesPayment(operation, payment) {
+  const paidAmount = extractOperationAmount(operation);
+  if (paidAmount === null) {
+    return false;
+  }
+  if (Math.abs(paidAmount - payment.amount) > 0.01) {
+    return false;
+  }
+  const labelMatch =
+    payment.label &&
+    typeof operation.label === 'string' &&
+    normalizeTextToken(operation.label) === normalizeTextToken(payment.label);
+  return labelMatch || operationContainsPaymentTag(operation, payment);
 }
 
 function applyDepositFromPayment(payment, amount, operationId) {
@@ -301,29 +357,28 @@ async function trySyncPaymentWithAPI(payment, payments) {
   }
   try {
     const history = await yoomoneyApiClient.operationHistory({
-      label: payment.label,
-      records: 20
+      type: 'deposition',
+      records: 50
     });
     const operations = Array.isArray(history.operations) ? history.operations : [];
     const match = operations.find((op) => {
-      if (!op || op.label !== payment.label) {
-        return false;
-      }
+      if (!op) return false;
       const directionOk = op.direction ? String(op.direction).toLowerCase() === 'in' : true;
       const statusOk = op.status ? String(op.status).toLowerCase() === 'success' : true;
-      return directionOk && statusOk;
+      return directionOk && statusOk && operationMatchesPayment(op, payment);
     });
     if (!match) {
       return false;
     }
-    const paidAmount = normalizeAmount(match.amount || match.sum || match.amount_due);
-    if (paidAmount === null || Math.abs(paidAmount - payment.amount) > 0.01) {
+    const paidAmount = extractOperationAmount(match);
+    if (paidAmount === null) {
       return false;
     }
     finalizeYooMoneyPayment(payment, payments, {
       paidAmount,
       operationId: match.operation_id || match.operationId || `api_${Date.now()}`,
-      source: 'api_history'
+      source: 'api_history',
+      payload: match
     });
     return true;
   } catch (err) {
@@ -690,6 +745,8 @@ app.get('/profile/yoomoney/pay/:paymentId', (req, res) => {
     return res.status(404).send('Платеж не найден');
   }
 
+  const paymentTag = `#${payment.paymentId}`;
+
   if (payment.status !== 'pending') {
     return res.status(400).send('Платеж уже обработан');
   }
@@ -706,8 +763,8 @@ app.get('/profile/yoomoney/pay/:paymentId', (req, res) => {
     sum: Number(payment.amount).toFixed(2),
     label: payment.label,
     successURL: `${PUBLIC_BASE_URL}/profile.html?payment=${payment.paymentId}`,
-    targets: `Пополнение баланса ${payment.username}`,
-    comment: `Пополнение баланса пользователя ${payment.username}`,
+    targets: `Пополнение баланса ${payment.username} ${paymentTag}`,
+    comment: `Пополнение fen4yara ${paymentTag}`,
     quickpayForm: 'shop',
     paymentType: 'AC'
   });
