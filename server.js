@@ -66,6 +66,9 @@ const YOOMONEY_NOTIFICATION_SECRET =
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || 'https://fen4yaragithubio-production.up.railway.app';
 const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '';
+if (!YOOMONEY_RECEIVER || !YOOMONEY_NOTIFICATION_SECRET) {
+  console.warn('⚠️ YooMoney env vars are missing. Check receiver and notification secret.');
+}
 const PAYMENT_TTL_MINUTES = Number(process.env.YOOMONEY_PAYMENT_TTL_MINUTES || 30);
 const YOOMONEY_PAYMENT_TTL_MS =
   Number.isFinite(PAYMENT_TTL_MINUTES) && PAYMENT_TTL_MINUTES > 0
@@ -638,6 +641,19 @@ app.get('/admin/download/deposits.json', requireAdmin, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="deposits.json"');
   res.sendFile(depositsFile);
 });
+
+app.get('/admin/yoomoney/test', requireAdmin, async (req, res) => {
+  if (!yoomoneyApiClient) {
+    return res.status(400).json({ error: 'YooMoney API client not initialized' });
+  }
+  try {
+    const accountInfo = await yoomoneyApiClient.accountInfo();
+    res.json({ success: true, accountInfo });
+  } catch (err) {
+    console.error('YooMoney API test failed:', err);
+    res.status(500).json({ error: 'API test failed', details: err.message || String(err) });
+  }
+});
 // ======= конец админки =======
 
 // ======= профиль пользователя =======
@@ -787,17 +803,25 @@ app.get('/profile/yoomoney/pay/:paymentId', (req, res) => {
 // Webhook для обработки уведомлений от YooMoney
 // YooMoney отправляет уведомления о входящих платежах
 // Для quickpay формы нужно настроить webhook URL в настройках кошелька YooMoney
+app.options('/profile/yoomoney/webhook', cors(corsOptions), (req, res) => {
+  res.sendStatus(200);
+});
+
 app.post(
   '/profile/yoomoney/webhook',
   express.urlencoded({ extended: true }),
   notificationChecker.middleware({ memo: true }, (req, res) => {
+    console.log('🔔 YooMoney webhook received:', {
+      headers: req.headers,
+      body: req.body
+    });
     const { label, amount, operation_id } = req.body;
     const incomingLabel = String(label || '').trim();
     const payments = readYooMoneyPayments();
     const payment = findPaymentByLabel(payments, incomingLabel);
 
     if (!payment) {
-      console.warn(`YooMoney webhook: платеж с label "${incomingLabel}" не найден`);
+      console.warn(`YooMoney webhook: платеж с label "${incomingLabel}" не найден`, req.body);
       return res.status(200).send('UNKNOWN_PAYMENT');
     }
 
