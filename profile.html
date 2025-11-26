@@ -28,6 +28,11 @@
         <button id="depositBtn" class="btn-primary" style="width:100%; margin-top:12px">+ Пополнить баланс</button>
         <p id="depositStatus" class="stat-subtext" style="margin-top:8px"></p>
       </article>
+      <article class="glass-card stat-card">
+        <p class="muted">Вывод (СБП)</p>
+        <button id="withdrawBtn" class="btn-secondary" style="width:100%; margin-top:12px">↗ Вывести</button>
+        <p id="withdrawStatus" class="stat-subtext" style="margin-top:8px"></p>
+      </article>
     </section>
 
     <section class="glass-card">
@@ -55,6 +60,11 @@
     <section class="glass-card">
       <p class="eyebrow">История депозитов</p>
       <div class="history-list" id="depositHistoryList"></div>
+    </section>
+
+    <section class="glass-card">
+      <p class="eyebrow">История выводов (СБП)</p>
+      <div class="history-list" id="withdrawHistoryList"></div>
     </section>
 
     <section class="glass-card">
@@ -87,6 +97,23 @@
     </div>
   </div>
 
+  <div id="withdrawModal" class="modal-overlay hidden">
+    <div class="modal-content glass-card">
+      <button id="withdrawModalClose" class="modal-close" aria-label="Закрыть">✕</button>
+      <div>
+        <h2>Вывод через СБП</h2>
+        <p class="muted">Укажите сумму и реквизиты для перевода по СБП.</p>
+        <input type="number" id="withdrawAmount" class="input-field" min="10" placeholder="Сумма (₽)" />
+        <input type="text" id="withdrawBankName" class="input-field" placeholder="Банк / получатель" />
+        <input type="text" id="withdrawSbpBankId" class="input-field" placeholder="ID банка СБП (если есть)" />
+        <input type="text" id="withdrawPhone" class="input-field" placeholder="Телефон, привязанный к СБП" />
+        <textarea id="withdrawComment" class="input-field" placeholder="Комментарий (по желанию)"></textarea>
+        <button id="confirmWithdrawBtn" class="btn-primary" style="width:100%; margin-top:12px">Отправить заявку</button>
+        <p id="withdrawMessage" class="message" style="margin-top:12px"></p>
+      </div>
+    </div>
+  </div>
+
   <script>
     const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
     let user = null;
@@ -109,9 +136,21 @@
     const coinflipHistoryList = document.getElementById('coinflipHistoryList');
     const diceHistoryList = document.getElementById('diceHistoryList');
     const depositHistoryList = document.getElementById('depositHistoryList');
+    const withdrawHistoryList = document.getElementById('withdrawHistoryList');
     const promocodeInput = document.getElementById('promocodeInput');
     const activatePromocodeBtn = document.getElementById('activatePromocodeBtn');
     const promocodeMessage = document.getElementById('promocodeMessage');
+    const withdrawBtn = document.getElementById('withdrawBtn');
+    const withdrawStatus = document.getElementById('withdrawStatus');
+    const withdrawModal = document.getElementById('withdrawModal');
+    const withdrawModalClose = document.getElementById('withdrawModalClose');
+    const withdrawAmount = document.getElementById('withdrawAmount');
+    const withdrawBankName = document.getElementById('withdrawBankName');
+    const withdrawSbpBankId = document.getElementById('withdrawSbpBankId');
+    const withdrawPhone = document.getElementById('withdrawPhone');
+    const withdrawComment = document.getElementById('withdrawComment');
+    const confirmWithdrawBtn = document.getElementById('confirmWithdrawBtn');
+    const withdrawMessage = document.getElementById('withdrawMessage');
 
     async function checkAuth() {
       try {
@@ -337,6 +376,37 @@
             depositHistoryList.appendChild(row);
           });
         }
+
+        // История выводов
+        withdrawHistoryList.innerHTML = '';
+        if (!data.withdrawals || !data.withdrawals.length) {
+          withdrawHistoryList.innerHTML = '<div class="history-item muted">Заявок на вывод нет</div>';
+          withdrawStatus.textContent = 'Новые заявки ещё не создавались';
+        } else {
+          data.withdrawals.forEach((entry) => {
+            const row = document.createElement('div');
+            row.className = 'history-item';
+            const date = new Date(entry.createdAt);
+            row.innerHTML = `<strong>${date.toLocaleString('ru-RU')}</strong> — ${entry.amount}₽ → ${entry.status}`;
+            withdrawHistoryList.appendChild(row);
+          });
+          const last = data.withdrawals[data.withdrawals.length - 1];
+          if (last.status === 'pending') {
+            withdrawStatus.textContent = `Есть ожидающая заявка на ${last.amount}₽`;
+            withdrawStatus.style.color = 'var(--warning)';
+          } else if (last.status === 'completed') {
+            withdrawStatus.textContent = `Последняя выплата выполнена на ${last.amount}₽`;
+            withdrawStatus.style.color = 'var(--success)';
+          } else if (last.status === 'error') {
+            withdrawStatus.textContent = `Ошибка выплаты: ${last.error || 'см. админа'}`;
+            withdrawStatus.style.color = 'var(--danger)';
+          } else if (last.status === 'cancelled') {
+            withdrawStatus.textContent = 'Последняя заявка отменена';
+            withdrawStatus.style.color = 'var(--text-muted)';
+          } else {
+            withdrawStatus.textContent = '';
+          }
+        }
       } catch (err) {
         console.error('History load error:', err);
       }
@@ -433,6 +503,26 @@
       if (e.target === depositModal) {
         depositModal.classList.add('hidden');
       }
+    });
+
+    // Вывод средств
+    withdrawBtn.addEventListener('click', () => {
+      withdrawModal.classList.remove('hidden');
+      withdrawAmount.value = '';
+      withdrawBankName.value = '';
+      withdrawSbpBankId.value = '';
+      withdrawPhone.value = '';
+      withdrawComment.value = '';
+      withdrawMessage.textContent = '';
+      withdrawMessage.className = 'message';
+    });
+
+    withdrawModalClose.addEventListener('click', () => {
+      withdrawModal.classList.add('hidden');
+    });
+
+    withdrawModal.addEventListener('click', (e) => {
+      if (e.target === withdrawModal) withdrawModal.classList.add('hidden');
     });
 
     confirmDepositBtn.addEventListener('click', async () => {
@@ -532,6 +622,51 @@
         } finally {
           confirmDepositBtn.disabled = false;
         }
+      }
+    });
+
+    confirmWithdrawBtn.addEventListener('click', async () => {
+      const amountValue = Number(withdrawAmount.value);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        withdrawMessage.textContent = 'Введите сумму вывода';
+        withdrawMessage.className = 'message error';
+        return;
+      }
+      const payload = {
+        amount: amountValue,
+        bankName: withdrawBankName.value.trim(),
+        sbpBankId: withdrawSbpBankId.value.trim(),
+        phone: withdrawPhone.value.trim(),
+        comment: withdrawComment.value.trim()
+      };
+      if (!payload.bankName || !payload.phone) {
+        withdrawMessage.textContent = 'Укажите банк и телефон, привязанный к СБП';
+        withdrawMessage.className = 'message error';
+        return;
+      }
+      try {
+        confirmWithdrawBtn.disabled = true;
+        withdrawMessage.textContent = 'Создаём заявку...';
+        withdrawMessage.className = 'message';
+        const resp = await fetch(`${BASE_URL}/profile/withdraw/sbp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Не удалось создать заявку');
+        withdrawMessage.textContent = data.message;
+        withdrawMessage.className = 'message success';
+        user.balance = data.balance;
+        balanceEl.textContent = user.balance;
+        await loadHistory();
+        setTimeout(() => withdrawModal.classList.add('hidden'), 2000);
+      } catch (err) {
+        withdrawMessage.textContent = err.message;
+        withdrawMessage.className = 'message error';
+      } finally {
+        confirmWithdrawBtn.disabled = false;
       }
     });
 

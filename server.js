@@ -58,6 +58,7 @@ const depositsFile
 const promocodesFile = path.join(__dirname, 'data', 'promocodes.json');
 const promocodeUsageFile = path.join(__dirname, 'data', 'promocode-usage.json');
 const yoomoneyPaymentsFile = path.join(__dirname, 'data', 'yoomoney-payments.json');
+const withdrawalsFile = path.join(__dirname, 'data', 'withdrawals.json');
 
 // YooMoney конфигурация
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
@@ -81,7 +82,11 @@ const YOOMONEY_COMMISSION_RULES = {
   AC: { mode: 'from_sum', rate: 0.03 }, // комиссия удерживается из суммы списания
   PC: { mode: 'from_amount_due', rate: 0.01 } // комиссия удерживается из суммы к получению
 };
+const WITHDRAW_MIN = Number(process.env.WITHDRAW_MIN || 10);
+const WITHDRAW_MAX = Number(process.env.WITHDRAW_MAX || 50000);
+const WITHDRAW_FEE_PERCENT = Number(process.env.WITHDRAW_FEE_PERCENT || 0);
 const notificationChecker = new YMNotificationChecker(YOOMONEY_NOTIFICATION_SECRET);
+const YOOMONEY_SBP_PATTERN_ID = process.env.YOOMONEY_SBP_PATTERN_ID || '97186';
 const ensureUsersFileExists = () => {
   const dir = path.join(__dirname, 'data'); 
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
@@ -149,6 +154,15 @@ const ensureYooMoneyPaymentsFileExists = () => {
   }
 };
 ensureYooMoneyPaymentsFileExists();
+
+const ensureWithdrawalsFileExists = () => {
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(withdrawalsFile)) {
+    fs.writeFileSync(withdrawalsFile, '[]', { encoding: 'utf8' });
+  }
+};
+ensureWithdrawalsFileExists();
 
 function readPromocodes() {
   try {
@@ -234,6 +248,20 @@ function writeYooMoneyPayments(arr) {
   }
 }
 
+function readWithdrawals() {
+  try {
+    const data = fs.readFileSync(withdrawalsFile, 'utf-8');
+    return JSON.parse(data || '[]');
+  } catch (err) {
+    console.error('Ошибка чтения withdrawals.json:', err);
+    return [];
+  }
+}
+
+function writeWithdrawals(arr) {
+  fs.writeFileSync(withdrawalsFile, JSON.stringify(arr, null, 2));
+}
+
 function normalizeAmount(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) {
@@ -268,6 +296,12 @@ function calculatePayableAmount(targetAmount, paymentType = YOOMONEY_PAYMENT_TYP
   return normalizeAmount(payable);
 }
 
+function calculateWithdrawNet(amount) {
+  if (!WITHDRAW_FEE_PERCENT) return amount;
+  const fee = (amount * WITHDRAW_FEE_PERCENT) / 100;
+  return normalizeAmount(Math.max(amount - fee, 0));
+}
+
 function generatePaymentId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -285,6 +319,10 @@ function findPaymentById(payments, paymentId) {
 
 function findPaymentByLabel(payments, label) {
   return payments.find((p) => p.label === label);
+}
+
+function generateWithdrawalId() {
+  return `wd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function extractOperationAmount(operation) {
@@ -463,6 +501,17 @@ function readHistoryStore() {
 }
 
 function writeHistoryStore(store) {
+function collectUserGameHistory(username) {
+  const crash = crashHistory.filter(
+    (round) => Array.isArray(round.players) && round.players.some((p) => p.username === username)
+  );
+  const roulette = rouletteHistory.filter(
+    (round) => Array.isArray(round.players) && round.players.some((p) => p.username === username)
+  );
+  const coinflip = coinflipHistory.filter((entry) => entry.username === username);
+  const dice = diceHistory.filter((entry) => entry.username === username);
+  return { crash, roulette, coinflip, dice };
+}
   fs.writeFileSync(historyFile, JSON.stringify(store, null, 2));
 }
 
@@ -689,6 +738,126 @@ app.get('/admin/yoomoney/test', requireAdmin, async (req, res) => {
     console.error('YooMoney API test failed:', err);
     res.status(500).json({ error: 'API test failed', details: err.message || String(err) });
   }
+});
+
+app.get('/admin/users/:username/profile', requireAdmin, (req, res) => {
+  const { username } = req.params;
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  const deposits = readDeposits().filter((d) => d.username === username);
+  const yoomoneyPayments = readYooMoneyPayments().filter((p) => p.username === username);
+  const withdrawals = readWithdrawals().filter((w) => w.username === username);
+  const games = collectUserGameHistory(username);
+  res.json({
+    user: {
+      username: user.username,
+      balance: user.balance,
+      banned: user.banned === true,
+      ip: user.ip
+    },
+    deposits,
+    yoomoneyPayments,
+    withdrawals,
+    games
+  });
+});
+
+app.get('/admin/withdrawals', requireAdmin, (req, res) => {
+  res.json(readWithdrawals());
+});
+
+function updateWithdrawalRecord(targetId, mutator) {
+  const withdrawals = readWithdrawals();
+  const index = withdrawals.findIndex((w) => w.id === targetId);
+  if (index === -1) {
+    return null;
+  }
+  const updated = mutator({ ...withdrawals[index] });
+  updated.updatedAt = Date.now();
+  withdrawals[index] = updated;
+  writeWithdrawals(withdrawals);
+  return updated;
+}
+
+async function performSbpPayout(withdrawal) {
+  if (!yoomoneyApiClient || !YOOMONEY_SBP_PATTERN_ID) {
+    throw new Error('YooMoney SBP payouts не настроены');
+  }
+  const requestParams = {
+    pattern_id: YOOMONEY_SBP_PATTERN_ID,
+    amount: withdrawal.amount,
+    'bank-name': withdrawal.bankName,
+    'sbp-bank-id': withdrawal.sbpBankId || '',
+    'phone-number': withdrawal.phone,
+    comment: withdrawal.comment || `SBP вывод ${withdrawal.id}`
+  };
+  const request = await yoomoneyApiClient.requestPayment(requestParams);
+  if (request.status !== 'success') {
+    throw new Error(`request-payment: ${request.error || request.status}`);
+  }
+  const processResponse = await yoomoneyApiClient.processPayment({
+    request_id: request.request_id,
+    money_source: 'wallet'
+  });
+  if (processResponse.status !== 'success') {
+    throw new Error(`process-payment: ${processResponse.error || processResponse.status}`);
+  }
+  return { request, processResponse };
+}
+
+app.post('/admin/withdrawals/:withdrawalId/process', requireAdmin, async (req, res) => {
+  const { withdrawalId } = req.params;
+  let payoutResult = null;
+  try {
+    const updated = await (async () =>
+      updateWithdrawalRecord(withdrawalId, (withdrawal) => {
+        if (!withdrawal || withdrawal.status !== 'pending') {
+          throw new Error('Выплата уже обработана или не найдена');
+        }
+        return { ...withdrawal, status: 'processing', processingAt: Date.now() };
+      }))();
+    if (!updated) {
+      return res.status(404).json({ error: 'Заявка не найдена' });
+    }
+    payoutResult = await performSbpPayout(updated);
+    const finalRecord = updateWithdrawalRecord(withdrawalId, (withdrawal) => ({
+      ...withdrawal,
+      status: 'completed',
+      completedAt: Date.now(),
+      payoutMeta: payoutResult
+    }));
+    res.json(finalRecord);
+  } catch (err) {
+    console.error('Ошибка выплаты через SBP:', err);
+    updateWithdrawalRecord(withdrawalId, (withdrawal) => ({
+      ...withdrawal,
+      status: 'error',
+      error: err.message,
+      errorAt: Date.now()
+    }));
+    res.status(500).json({ error: err.message || 'Ошибка выплаты' });
+  }
+});
+
+app.post('/admin/withdrawals/:withdrawalId/cancel', requireAdmin, (req, res) => {
+  const { withdrawalId } = req.params;
+  let targetUser = null;
+  const updated = updateWithdrawalRecord(withdrawalId, (withdrawal) => {
+    if (!withdrawal || withdrawal.status !== 'pending') {
+      throw new Error('Заявка уже обработана');
+    }
+    targetUser = findUser(withdrawal.username);
+    if (targetUser) {
+      updateUserBalance(withdrawal.username, targetUser.balance + withdrawal.amount);
+    }
+    return { ...withdrawal, status: 'cancelled', cancelledAt: Date.now() };
+  });
+  if (!updated) {
+    return res.status(404).json({ error: 'Заявка не найдена' });
+  }
+  res.json(updated);
 });
 // ======= конец админки =======
 
@@ -980,16 +1149,81 @@ app.get('/profile/history', (req, res) => {
   );
   const userCoinflip = coinflipHistory.filter((entry) => entry.username === username);
   const userDice = diceHistory.filter((entry) => entry.username === username);
+  const withdrawals = readWithdrawals().filter((w) => w.username === username);
   const { userDeposits } = getUserDepositsMeta(username);
   res.json({
     crash: userCrash,
     roulette: userRoulette,
     coinflip: userCoinflip,
     dice: userDice,
-    deposits: userDeposits
+    deposits: userDeposits,
+    withdrawals
   });
 });
 // ======= конец профиля =======
+
+// ======= вывод средств через SBP =======
+app.post('/profile/withdraw/sbp', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const user = findUser(username);
+  if (!user) {
+    return res.status(404).json({ error: 'Пользователь не найден' });
+  }
+  if (user.banned === true) {
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
+  }
+  const amount = normalizeAmount(req.body.amount);
+  if (amount === null || amount < WITHDRAW_MIN || amount > WITHDRAW_MAX) {
+    return res
+      .status(400)
+      .json({ error: `Сумма вывода должна быть от ${WITHDRAW_MIN} до ${WITHDRAW_MAX}` });
+  }
+  if (user.balance < amount) {
+    return res.status(400).json({ error: 'Недостаточно средств' });
+  }
+  const { bankName, sbpBankId, phone, comment } = req.body;
+  if (!bankName || !phone) {
+    return res.status(400).json({ error: 'Укажите банк и номер телефона для выплаты по СБП' });
+  }
+  const netAmount = calculateWithdrawNet(amount);
+  const feeAmount = normalizeAmount(amount - netAmount);
+  const updatedBalance = user.balance - amount;
+  updateUserBalance(username, updatedBalance);
+  const withdrawals = readWithdrawals();
+  const withdrawal = {
+    id: generateWithdrawalId(),
+    username,
+    amount,
+    netAmount,
+    feeAmount: feeAmount || 0,
+    bankName,
+    sbpBankId: sbpBankId || '',
+    phone,
+    comment: comment || '',
+    status: 'pending',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  withdrawals.push(withdrawal);
+  writeWithdrawals(withdrawals);
+  res.json({
+    message: 'Заявка на вывод создана. Ожидайте подтверждения администратора.',
+    withdrawal,
+    balance: updatedBalance
+  });
+});
+
+app.get('/profile/withdrawals', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Не авторизован' });
+  }
+  const username = req.session.user.username;
+  const withdrawals = readWithdrawals().filter((w) => w.username === username);
+  res.json(withdrawals);
+});
 
 let roulettePlayers = []; // текущая очередь: [{ username, bet, color }]
 let lastSpinPlayers = null; // «снимок» очереди перед спином
@@ -1728,6 +1962,24 @@ app.get('/admin/download/promocodes.json', requireAdmin, (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', 'attachment; filename="promocodes.json"');
   res.sendFile(promocodesFile);
+});
+
+app.get('/admin/download/promocode-usage.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="promocode-usage.json"');
+  res.sendFile(promocodeUsageFile);
+});
+
+app.get('/admin/download/yoomoney-payments.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="yoomoney-payments.json"');
+  res.sendFile(yoomoneyPaymentsFile);
+});
+
+app.get('/admin/download/withdrawals.json', requireAdmin, (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="withdrawals.json"');
+  res.sendFile(withdrawalsFile);
 });
 
 // === По умолчанию — отдаём index.html на корень ===

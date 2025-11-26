@@ -43,6 +43,9 @@
           <button id="downloadHistoryBtn" class="btn-secondary" style="width:auto">📥 history.json</button>
           <button id="downloadDepositsBtn" class="btn-secondary" style="width:auto">📥 deposits.json</button>
           <button id="downloadPromocodesBtn" class="btn-secondary" style="width:auto">📥 promocodes.json</button>
+          <button id="downloadPromoUsageBtn" class="btn-secondary" style="width:auto">📥 promo-usage.json</button>
+          <button id="downloadYooPaymentsBtn" class="btn-secondary" style="width:auto">📥 yoomoney-payments.json</button>
+          <button id="downloadWithdrawalsBtn" class="btn-secondary" style="width:auto">📥 withdrawals.json</button>
           <button id="refreshBtn" class="btn-secondary" style="width:auto">Обновить список</button>
           <button id="adminLogoutBtn" class="btn-outline" style="width:auto">Выйти</button>
         </div>
@@ -60,7 +63,8 @@
               <th>Текущий баланс</th>
               <th>Статус</th>
               <th>Новый баланс</th>
-              <th>Действие</th>
+          <th>Действие</th>
+          <th>Профиль</th>
             </tr>
           </thead>
           <tbody id="usersTable"></tbody>
@@ -102,6 +106,46 @@
       </div>
       <p id="promocodesMessage" class="message"></p>
     </section>
+
+    <section class="glass-card" id="withdrawalsSection" style="display:none">
+      <div class="top-bar" style="gap:12px">
+        <div>
+          <p class="eyebrow">Заявки на вывод (СБП)</p>
+          <p class="muted">Проверяйте реквизиты перед подтверждением.</p>
+        </div>
+        <div class="admin-actions">
+          <button id="refreshWithdrawalsBtn" class="btn-secondary" style="width:auto">Обновить</button>
+        </div>
+      </div>
+      <div class="table-wrapper" style="overflow-x:auto">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Пользователь</th>
+              <th>Сумма</th>
+              <th>Банк</th>
+              <th>Телефон</th>
+              <th>Статус</th>
+              <th>Дата</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="withdrawalsTable"></tbody>
+        </table>
+      </div>
+      <p id="withdrawalsMessage" class="message"></p>
+    </section>
+  </div>
+
+  <div id="userProfileModal" class="modal-overlay hidden">
+    <div class="modal-content glass-card" style="max-width:720px">
+      <button id="userProfileModalClose" class="modal-close" aria-label="Закрыть">✕</button>
+      <div id="userProfileBody">
+        <h2>Профиль игрока</h2>
+        <div id="userProfileContent" class="history-list" style="max-height:60vh; overflow:auto"></div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -123,6 +167,30 @@
     const promocodeCreateMessage = document.getElementById('promocodeCreateMessage');
     const promocodesMessage = document.getElementById('promocodesMessage');
     const refreshPromocodesBtn = document.getElementById('refreshPromocodesBtn');
+    const withdrawalsSection = document.getElementById('withdrawalsSection');
+    const withdrawalsTable = document.getElementById('withdrawalsTable');
+    const withdrawalsMessage = document.getElementById('withdrawalsMessage');
+    const refreshWithdrawalsBtn = document.getElementById('refreshWithdrawalsBtn');
+    const userProfileModal = document.getElementById('userProfileModal');
+    const userProfileContent = document.getElementById('userProfileContent');
+    const userProfileModalClose = document.getElementById('userProfileModalClose');
+
+    async function downloadAdminFile(endpoint, filename) {
+      try {
+        const resp = await fetch(`${BASE_URL}${endpoint}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось скачать файл');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    }
 
     async function fetchUsers() {
       const resp = await fetch(`${BASE_URL}/admin/users`, { credentials: 'include' });
@@ -147,6 +215,7 @@
           </td>
           <td><input type="number" min="0" class="input-field" value="${balance}" data-username="${username}" /></td>
           <td><button class="btn-primary" data-username="${username}" data-action="save-balance">Сохранить</button></td>
+          <td><button class="btn-secondary" data-username="${username}" data-action="view-profile">Профиль</button></td>
         `;
         usersTable.appendChild(tr);
       });
@@ -168,16 +237,29 @@
       }
     }
 
+    async function initWithdrawals() {
+      try {
+        const list = await fetchWithdrawals();
+        renderWithdrawals(list);
+        withdrawalsSection.style.display = '';
+      } catch (err) {
+        console.warn('Withdrawals unavailable:', err.message);
+        withdrawalsSection.style.display = 'none';
+      }
+    }
+
     async function init() {
       try {
         const users = await fetchUsers();
         renderUsers(users);
         togglePanels(true);
         initPromocodes();
+        initWithdrawals();
       } catch (err) {
         console.warn('Admin auth check failed:', err.message);
         togglePanels(false);
         promocodesSection.style.display = 'none';
+        withdrawalsSection.style.display = 'none';
       }
     }
 
@@ -279,79 +361,44 @@
           adminPanelMessage.className = 'message error';
         }
       }
-    });
-    
-    document.getElementById('downloadUsersBtn').addEventListener('click', async () => {
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/download/users.json`, { credentials: 'include' });
-        if (!resp.ok) throw new Error('Не удалось скачать');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'users.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        adminPanelMessage.textContent = err.message;
-        adminPanelMessage.className = 'message error';
-      }
-    });
-    
-    document.getElementById('downloadHistoryBtn').addEventListener('click', async () => {
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/download/history.json`, { credentials: 'include' });
-        if (!resp.ok) throw new Error('Не удалось скачать');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'history.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        adminPanelMessage.textContent = err.message;
-        adminPanelMessage.className = 'message error';
-      }
-    });
-    
-    document.getElementById('downloadDepositsBtn').addEventListener('click', async () => {
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/download/deposits.json`, { credentials: 'include' });
-        if (!resp.ok) throw new Error('Не удалось скачать');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'deposits.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        adminPanelMessage.textContent = err.message;
-        adminPanelMessage.className = 'message error';
-      }
-    });
 
-    document.getElementById('downloadPromocodesBtn').addEventListener('click', async () => {
-      try {
-        const resp = await fetch(`${BASE_URL}/admin/download/promocodes.json`, { credentials: 'include' });
-        if (!resp.ok) throw new Error('Не удалось скачать');
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'promocodes.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        adminPanelMessage.textContent = err.message;
-        adminPanelMessage.className = 'message error';
+      if (action === 'view-profile') {
+        openUserProfile(username);
+        return;
       }
     });
+    
+    document.getElementById('downloadUsersBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/users.json', 'users.json')
+    );
+    document.getElementById('downloadHistoryBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/history.json', 'history.json')
+    );
+    document.getElementById('downloadDepositsBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/deposits.json', 'deposits.json')
+    );
+    document.getElementById('downloadPromocodesBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/promocodes.json', 'promocodes.json')
+    );
+    document.getElementById('downloadPromoUsageBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/promocode-usage.json', 'promocode-usage.json')
+    );
+    document.getElementById('downloadYooPaymentsBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/yoomoney-payments.json', 'yoomoney-payments.json')
+    );
+    document.getElementById('downloadWithdrawalsBtn').addEventListener('click', () =>
+      downloadAdminFile('/admin/download/withdrawals.json', 'withdrawals.json')
+    );
 
     // Промокоды
     async function fetchPromocodes() {
       const resp = await fetch(`${BASE_URL}/admin/promocodes`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Нет доступа');
+      return resp.json();
+    }
+
+    async function fetchWithdrawals() {
+      const resp = await fetch(`${BASE_URL}/admin/withdrawals`, { credentials: 'include' });
       if (!resp.ok) throw new Error('Нет доступа');
       return resp.json();
     }
@@ -373,6 +420,154 @@
         promocodesTable.appendChild(tr);
       });
     }
+
+    function renderWithdrawals(list) {
+      withdrawalsTable.innerHTML = '';
+      if (!list.length) {
+        withdrawalsTable.innerHTML = '<tr><td colspan="8" class="muted">Заявок нет</td></tr>';
+        return;
+      }
+      list
+        .slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .forEach((w) => {
+          const tr = document.createElement('tr');
+          const statusLabel = w.status === 'pending'
+            ? '🟡 Ожидает'
+            : w.status === 'completed'
+              ? '🟢 Выплачено'
+              : w.status === 'cancelled'
+                ? '⚪ Отменено'
+                : w.status === 'processing'
+                  ? '🔄 Выплата...'
+                  : '🔴 Ошибка';
+          const actions =
+            w.status === 'pending'
+              ? `<button class="btn-primary" data-id="${w.id}" data-action="process-withdraw" style="width:auto">Выплатить</button>
+                 <button class="btn-outline" data-id="${w.id}" data-action="cancel-withdraw" style="width:auto">Отменить</button>`
+              : '';
+          tr.innerHTML = `
+            <td>${w.id}</td>
+            <td>${w.username}</td>
+            <td>${w.amount}₽</td>
+            <td>${w.bankName || '—'}</td>
+            <td>${w.phone || '—'}</td>
+            <td>${statusLabel}</td>
+            <td>${new Date(w.updatedAt || w.completedAt || w.cancelledAt || w.createdAt).toLocaleString('ru-RU')}</td>
+            <td>${actions || '-'}</td>
+          `;
+          withdrawalsTable.appendChild(tr);
+        });
+    }
+
+    function renderSimpleList(items, formatter, emptyText) {
+      if (!items || !items.length) {
+        return `<div class="muted">${emptyText}</div>`;
+      }
+      return `<ul class="history-sublist">
+        ${items.map(formatter).join('')}
+      </ul>`;
+    }
+
+    function renderUserProfileModal(data) {
+      const { user, deposits, yoomoneyPayments, withdrawals, games } = data;
+      const formatDate = (ts) => new Date(ts).toLocaleString('ru-RU');
+      userProfileContent.innerHTML = `
+        <div class="history-item"><strong>${user.username}</strong> · баланс ${user.balance} 🍬 ${user.banned ? '(заблокирован)' : ''}<br/>IP: ${user.ip || '—'}</div>
+        <h3>Пополнения</h3>
+        ${renderSimpleList(
+          deposits.slice(-10).reverse(),
+          (d) => `<li>${formatDate(d.timestamp)} · +${d.amount} 🍬 (${d.method || 'free'})</li>`,
+          'Нет пополнений'
+        )}
+        <h3>YooMoney платежи</h3>
+        ${renderSimpleList(
+          yoomoneyPayments.slice(-10).reverse(),
+          (p) => `<li>${formatDate(p.createdAt)} · ${p.amount}₽ (${p.status})</li>`,
+          'Нет платежей YooMoney'
+        )}
+        <h3>Выводы (СБП)</h3>
+        ${renderSimpleList(
+          withdrawals.slice(-10).reverse(),
+          (w) => `<li>${formatDate(w.createdAt)} · ${w.amount}₽ → ${w.status}</li>`,
+          'Заявок на вывод нет'
+        )}
+        <h3>Игры</h3>
+        <div class="history-item">
+          <strong>Краш:</strong> ${games.crash.length} · <strong>Рулетка:</strong> ${games.roulette.length} · <strong>Коинфлип:</strong> ${games.coinflip.length} · <strong>Дайс:</strong> ${games.dice.length}
+        </div>
+      `;
+      userProfileModal.classList.remove('hidden');
+    }
+
+    function closeUserProfileModal() {
+      userProfileModal.classList.add('hidden');
+    }
+
+    async function openUserProfile(username) {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(username)}/profile`, {
+          credentials: 'include'
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Не удалось загрузить профиль');
+        renderUserProfileModal(data);
+      } catch (err) {
+        adminPanelMessage.textContent = err.message;
+        adminPanelMessage.className = 'message error';
+      }
+    }
+
+    async function refreshWithdrawals() {
+      try {
+        const list = await fetchWithdrawals();
+        renderWithdrawals(list);
+        withdrawalsMessage.textContent = 'Заявки обновлены';
+        withdrawalsMessage.className = 'message success';
+        setTimeout(() => (withdrawalsMessage.textContent = ''), 2000);
+      } catch (err) {
+        withdrawalsMessage.textContent = err.message;
+        withdrawalsMessage.className = 'message error';
+      }
+    }
+
+    refreshWithdrawalsBtn.addEventListener('click', refreshWithdrawals);
+
+    withdrawalsTable.addEventListener('click', async (e) => {
+      if (e.target.tagName !== 'BUTTON') return;
+      const action = e.target.getAttribute('data-action');
+      const id = e.target.getAttribute('data-id');
+      if (!action || !id) return;
+      try {
+        if (action === 'process-withdraw') {
+          if (!confirm(`Выплатить заявку ${id}?`)) return;
+          const resp = await fetch(`${BASE_URL}/admin/withdrawals/${encodeURIComponent(id)}/process`, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Ошибка выплаты');
+        }
+        if (action === 'cancel-withdraw') {
+          if (!confirm(`Отменить заявку ${id} и вернуть средства?`)) return;
+          const resp = await fetch(`${BASE_URL}/admin/withdrawals/${encodeURIComponent(id)}/cancel`, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Ошибка отмены');
+        }
+        refreshWithdrawals();
+      } catch (err) {
+        withdrawalsMessage.textContent = err.message;
+        withdrawalsMessage.className = 'message error';
+      }
+    });
+
+    userProfileModalClose.addEventListener('click', closeUserProfileModal);
+    userProfileModal.addEventListener('click', (e) => {
+      if (e.target === userProfileModal) closeUserProfileModal();
+    });
 
     createPromocodeBtn.addEventListener('click', async () => {
       const code = newPromocodeCode.value.trim();
