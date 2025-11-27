@@ -604,59 +604,55 @@ button.cashout {
   color: var(--text-muted);
 }
 
-.roulette-strip-card {
+.roulette-wheel-card {
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
 
-.roulette-strip-viewport {
+.roulette-wheel {
   position: relative;
-  width: 100%;
-  min-height: 80px;
-  padding: 12px 0;
-  border-radius: 16px;
-  overflow: hidden;
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.9));
+  width: min(100%, 420px);
+  aspect-ratio: 1;
+  border-radius: 24px;
+  padding: 18px;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.9));
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.roulette-strip {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  will-change: transform;
-}
-
-.roulette-strip-pointer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--accent-strong);
-  box-shadow: 0 0 14px rgba(127, 90, 240, 0.9);
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.roulette-segment {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-  color: #ffffff;
-  white-space: nowrap;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
 }
 
-.roulette-segment-name {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+.roulette-wheel-spin {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  transition: transform 0s;
+  will-change: transform;
+}
+
+.roulette-wheel-spin canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: block;
+}
+
+.roulette-wheel-pointer {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-bottom: 26px solid var(--accent-strong);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
 }
 
 .plinko-layout {

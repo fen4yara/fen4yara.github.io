@@ -36,12 +36,14 @@
       </article>
 
       <article class="glass-card wheel-wrapper">
-        <div class="roulette-strip-card">
-          <div class="roulette-strip-viewport" id="rouletteStripViewport">
-            <div class="roulette-strip" id="rouletteStrip"></div>
-            <div class="roulette-strip-pointer"></div>
+        <div class="roulette-wheel-card">
+          <div class="roulette-wheel" id="rouletteWheel">
+            <div class="roulette-wheel-spin" id="rouletteWheelSpin">
+              <canvas id="rouletteWheelCanvas" width="360" height="360"></canvas>
+            </div>
+            <div class="roulette-wheel-pointer"></div>
           </div>
-          <p class="muted" style="margin-top:8px; text-align:center;">Шанс на выигрыш пропорционален размеру сегмента</p>
+          <p class="muted" style="margin-top:8px; text-align:center;">Шанс на выигрыш пропорционален размеру сектора</p>
         </div>
         <div class="glass-card" style="width:100%; padding:18px">
           <p class="muted">Участники и ставки</p>
@@ -77,8 +79,10 @@
     const balanceEl = document.getElementById('balance');
     const messageEl = document.getElementById('message');
     const joinBtn = document.getElementById('joinBtn');
-    const stripEl = document.getElementById('rouletteStrip');
-    const stripViewportEl = document.getElementById('rouletteStripViewport');
+    const wheelEl = document.getElementById('rouletteWheel');
+    const wheelSpinEl = document.getElementById('rouletteWheelSpin');
+    const wheelCanvas = document.getElementById('rouletteWheelCanvas');
+    const wheelCtx = wheelCanvas ? wheelCanvas.getContext('2d') : null;
     const countdownTextEl = document.getElementById('countdown-text');
     const timerEl = document.getElementById('timer');
     const legendEl = document.getElementById('legend');
@@ -87,8 +91,8 @@
     const detailModalBody = document.getElementById('rouletteModalBody');
     const detailModalClose = document.getElementById('rouletteModalClose');
     const COLOR_FALLBACKS = ['#ff5f9e', '#7f5af0', '#34d399', '#facc15', '#38bdf8', '#fb7185'];
-    let stripMeta = null;
-    let lastStripSnapshot = [];
+    let wheelMeta = null;
+    let wheelRotation = 0;
     let historyLocked = false;
 
    // Плавность анимации
@@ -97,10 +101,10 @@
     }
 
     function placeholderSegments() {
-      return Array.from({ length: 6 }, (_, idx) => ({
+      return Array.from({ length: 8 }, (_, idx) => ({
         username: '',
         bet: 1,
-        color: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.12)'
+        color: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.14)'
       }));
     }
 
@@ -109,98 +113,89 @@
       messageEl.style.color = color;
     }
 
-    function cloneSegments(list) {
-      return list.map((segment) => ({
-        username: segment.username,
-        bet: Number(segment.bet) || 1,
-        color: segment.color
-      }));
+    function setWheelRotation(rad) {
+      wheelRotation = rad;
+      if (wheelSpinEl) {
+        wheelSpinEl.style.transform = `rotate(${rad}rad)`;
+      }
     }
 
-    function buildStrip(list, options = {}) {
-      const { rememberSnapshot = true } = options;
-      const hasData = Array.isArray(list) && list.length > 0;
-      stripEl.innerHTML = '';
-      stripMeta = null;
+    function drawWheel(segments) {
+      if (!wheelCanvas || !wheelCtx) return;
+      const containerWidth = wheelEl ? wheelEl.clientWidth : 320;
+      const size = Math.min(Math.max(containerWidth, 240), 420);
+      const dpr = window.devicePixelRatio || 1;
+      wheelCanvas.width = size * dpr;
+      wheelCanvas.height = size * dpr;
+      wheelCanvas.style.width = `${size}px`;
+      wheelCanvas.style.height = `${size}px`;
+      wheelCtx.resetTransform?.();
+      wheelCtx.scale(dpr, dpr);
+      wheelCtx.clearRect(0, 0, size, size);
 
-      if (!hasData) {
-        renderLegend([]);
-      }
-
-      const sourceSegments = hasData ? list : placeholderSegments();
-
-      const segments = sourceSegments.map((segment, idx) => {
-        return {
-          ...segment,
-          bet: Number(segment.bet) || 1,
-          color: segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length]
-        };
-      });
-
-      const totalBet = segments.reduce((s, p) => s + p.bet, 0) || 1;
-      const targetPatternWidth = 1400;
-      const minPxPerTicket = 4;
-      const maxPxPerTicket = 28;
-      const pxPerTicket = Math.min(maxPxPerTicket, Math.max(minPxPerTicket, targetPatternWidth / totalBet));
-
-      let cumulativeTickets = 0;
-      let patternWidth = 0;
-      const fragment = document.createDocumentFragment();
+      const center = size / 2;
+      const radius = center - 12;
 
       segments.forEach((segment) => {
-        const segmentWidth = segment.bet * pxPerTicket;
-        const segEl = document.createElement('div');
-        segEl.className = 'roulette-segment';
-        segEl.style.backgroundColor = segment.color;
-        segEl.style.width = `${segmentWidth}px`;
-
-        const label = document.createElement('span');
-        label.className = 'roulette-segment-name';
-        label.textContent = segment.username;
-        segEl.appendChild(label);
-
-        fragment.appendChild(segEl);
-
-        segment.startTicket = cumulativeTickets;
-        segment.endTicket = cumulativeTickets + segment.bet;
-        segment.startPx = patternWidth;
-        segment.endPx = patternWidth + segmentWidth;
-
-        cumulativeTickets += segment.bet;
-        patternWidth += segmentWidth;
+        wheelCtx.beginPath();
+        wheelCtx.moveTo(center, center);
+        wheelCtx.arc(center, center, radius, segment.startAngle, segment.endAngle);
+        wheelCtx.closePath();
+        wheelCtx.fillStyle = segment.color;
+        wheelCtx.fill();
+        wheelCtx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+        wheelCtx.lineWidth = 1;
+        wheelCtx.stroke();
       });
 
-      stripEl.appendChild(fragment);
-      stripEl.style.transform = 'translateX(0px)';
-      stripMeta = {
-        totalBet,
-        pxPerTicket,
-        patternWidth,
-        segments,
-        baseHTML: stripEl.innerHTML,
-        repeats: 1
-      };
-      if (hasData) {
-        renderLegend(segments);
-        if (rememberSnapshot) {
-          lastStripSnapshot = cloneSegments(segments);
-        }
-      } else {
-        renderLegend([]);
-      }
+      wheelCtx.beginPath();
+      wheelCtx.arc(center, center, 30, 0, Math.PI * 2);
+      wheelCtx.fillStyle = '#050608';
+      wheelCtx.fill();
+      wheelCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+      wheelCtx.stroke();
     }
 
-    function prepareStripForSpin(laps) {
-      if (!stripEl || !stripMeta?.baseHTML) return 1;
-      const repeats = Math.max(3, laps + 2);
-      let combined = '';
-      for (let i = 0; i < repeats; i++) {
-        combined += stripMeta.baseHTML;
+    function buildWheel(list = [], options = {}) {
+      const { force = false } = options;
+      if (isAnimating && !force) return;
+
+      const hasPlayers = Array.isArray(list) && list.length > 0;
+      const sourceSegments = hasPlayers ? list : placeholderSegments();
+      const totalBet = sourceSegments.reduce((sum, seg) => sum + (Number(seg.bet) || 1), 0) || 1;
+      const anglePerTicket = (Math.PI * 2) / totalBet;
+      let currentAngle = -Math.PI / 2;
+      let cumulativeTickets = 0;
+
+      const segments = sourceSegments.map((segment, idx) => {
+        const bet = Number(segment.bet) || 1;
+        const color = segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length];
+        const sweep = bet * anglePerTicket;
+        const seg = {
+          username: segment.username || '',
+          bet,
+          color,
+          startAngle: currentAngle,
+          endAngle: currentAngle + sweep,
+          startTicket: cumulativeTickets,
+          endTicket: cumulativeTickets + bet
+        };
+        currentAngle += sweep;
+        cumulativeTickets += bet;
+        return seg;
+      });
+
+      wheelMeta = {
+        totalBet,
+        anglePerTicket,
+        segments,
+        hasPlayers
+      };
+      drawWheel(segments);
+      if (!isAnimating) {
+        setWheelRotation(0);
       }
-      stripEl.innerHTML = combined;
-      stripMeta.repeats = repeats;
-      stripEl.style.transform = 'translateX(0px)';
-      return repeats;
+      renderLegend(hasPlayers ? segments : []);
     }
 
     // Рисуем легенду
@@ -308,16 +303,9 @@
           else throw new Error('Не удалось получить игроков');
         }
         const data = await resp.json();
-        const incomingPlayers = Array.isArray(data.players) ? data.players : [];
-        players = incomingPlayers;
+        players = Array.isArray(data.players) ? data.players : [];
         if (!isAnimating) {
-          if (incomingPlayers.length) {
-            buildStrip(incomingPlayers);
-          } else if (lastStripSnapshot.length) {
-            buildStrip(lastStripSnapshot, { rememberSnapshot: false });
-          } else {
-            buildStrip([]);
-          }
+          buildWheel(players);
         }
 
         // Пересчитываем локальную метку nextSpinTimestamp:
@@ -431,6 +419,7 @@
         if (!r.ok) {
           console.warn('Результат пока недоступен, попробуем через 500 мс');
           isAnimating = false;
+          historyLocked = false;
           setTimeout(animateSpin, 500);
           return;
         }
@@ -438,6 +427,7 @@
       } catch (err) {
         console.error('Ошибка при запросе /roulette/result:', err);
         isAnimating = false;
+        historyLocked = false;
         setTimeout(animateSpin, 1000);
         return;
       }
@@ -448,67 +438,58 @@
       if (!spinPlayers || spinPlayers.length < 2) {
         showMessage('Недостаточно игроков для спина.', 'orange');
         isAnimating = false;
+        historyLocked = false;
         return;
       }
 
       showMessage('Колесо крутится…');
+      buildWheel(spinPlayers, { force: true });
 
-      const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0) || 1;
-      const winningTicket = typeof resultData.winningTicket === 'number'
-        ? resultData.winningTicket
-        : totalBet / 2;
-      const clampedTicket = Math.min(Math.max(winningTicket, 0), totalBet);
-
-      if (!stripMeta) {
-        buildStrip(spinPlayers);
-      }
-
-      if (!stripMeta) {
+      if (!wheelMeta) {
         showMessage('Ошибка визуализации рулетки.', 'red');
         isAnimating = false;
         historyLocked = false;
         return;
       }
 
-      const { pxPerTicket, patternWidth } = stripMeta || { pxPerTicket: 4, patternWidth: totalBet * 4 };
-      const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
-      const minTurns = 3;
-      const maxTurns = 6;
+      const totalBet = wheelMeta.totalBet || spinPlayers.reduce((s, p) => s + p.bet, 0) || 1;
+      const winningTicket = typeof resultData.winningTicket === 'number'
+        ? resultData.winningTicket
+        : totalBet / 2;
+      const clampedTicket = Math.min(Math.max(winningTicket, 0), totalBet);
+      const normalizedAngle = (clampedTicket / totalBet) * Math.PI * 2;
+      const minTurns = 4;
+      const maxTurns = 7;
       const laps = minTurns + Math.floor(Math.random() * (maxTurns - minTurns + 1));
-      const repeats = prepareStripForSpin(laps);
-      const totalStripWidth = patternWidth * repeats;
-      const maxTranslate = Math.max(totalStripWidth - viewportWidth, 0);
-      const ticketOffsetPx = clampedTicket * pxPerTicket;
-      const travelDistance = laps * patternWidth + ticketOffsetPx;
-      const desiredTranslate = travelDistance - viewportWidth / 2;
-      const finalTranslate = Math.min(Math.max(desiredTranslate, 0), maxTranslate);
-
-      const spinDuration = 5000;
+      const finalRotation = -normalizedAngle - laps * Math.PI * 2;
+      const spinDuration = 5500;
       const startTime = performance.now();
+      const startRotation = wheelRotation % (Math.PI * 2);
+      const rotationDelta = finalRotation - startRotation;
 
       function frame(now) {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / spinDuration, 1);
         const eased = easeOut(t);
-        const currentDistance = eased * finalTranslate;
-        const translateX = -currentDistance;
-        stripEl.style.transform = `translateX(${translateX}px)`;
+        const currentRotation = startRotation + rotationDelta * eased;
+        setWheelRotation(currentRotation);
 
-      if (t < 1) {
-        requestAnimationFrame(frame);
-      } else {
-        const ticketNote = typeof winningTicket === 'number'
-          ? ` (билет ${winningTicket.toFixed(2)})`
-          : '';
-        showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${formatCandy(totalPot)}${ticketNote}`, 'green');
-        refreshBalance()
-          .finally(() => {
-            players = [];
-            isAnimating = false;
-            historyLocked = false;
-            loadRouletteHistory();
-          });
-      }
+        if (t < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          const ticketNote = typeof winningTicket === 'number'
+            ? ` (билет ${winningTicket.toFixed(2)})`
+            : '';
+          showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${formatCandy(totalPot)}${ticketNote}`, 'green');
+          refreshBalance()
+            .finally(() => {
+              players = [];
+              buildWheel([], { force: true });
+              isAnimating = false;
+              historyLocked = false;
+              loadRouletteHistory();
+            });
+        }
       }
 
       requestAnimationFrame(frame);
@@ -524,6 +505,7 @@
           document.getElementById('bet').value = lastBet;
         }
         balanceEl.textContent = formatCoins(user.balance);
+        buildWheel([]);
 
         await fetchPlayersAndDraw();
         await loadRouletteHistory();
@@ -536,9 +518,15 @@
       }
     });
 
+    window.addEventListener('resize', () => {
+      if (!isAnimating) {
+        buildWheel(players.length ? players : []);
+      }
+    });
+
     // 6) При клике «Присоединиться»
     joinBtn.addEventListener('click', async () => {
-      const betValue = parseInt(document.getElementById('bet').value);
+      const betValue = parseInt(document.getElementById('bet').value, 10);
       if (!betValue || betValue <= 0) {
         showMessage('Некорректная ставка!', 'red');
         return;
@@ -561,13 +549,7 @@
 
         players = data.players;
         if (!isAnimating) {
-          if (players.length) {
-            buildStrip(players);
-          } else if (lastStripSnapshot.length) {
-            buildStrip(lastStripSnapshot, { rememberSnapshot: false });
-          } else {
-            buildStrip([]);
-          }
+          buildWheel(players);
         }
 
         await refreshBalance();
