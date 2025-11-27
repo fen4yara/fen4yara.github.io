@@ -88,6 +88,8 @@
     const detailModalClose = document.getElementById('rouletteModalClose');
     const COLOR_FALLBACKS = ['#ff5f9e', '#7f5af0', '#34d399', '#facc15', '#38bdf8', '#fb7185'];
     let stripMeta = null;
+    let lastStripSnapshot = [];
+    let historyLocked = false;
 
    // Плавность анимации
     function easeOut(t) {
@@ -107,16 +109,27 @@
       messageEl.style.color = color;
     }
 
-    function buildStrip(list) {
+    function cloneSegments(list) {
+      return list.map((segment) => ({
+        username: segment.username,
+        bet: Number(segment.bet) || 1,
+        color: segment.color
+      }));
+    }
+
+    function buildStrip(list, options = {}) {
+      const { rememberSnapshot = true } = options;
+      const hasData = Array.isArray(list) && list.length > 0;
       stripEl.innerHTML = '';
       stripMeta = null;
 
-      if (!list || !list.length) {
+      if (!hasData) {
         renderLegend([]);
-        return;
       }
 
-      const segments = list.map((segment, idx) => {
+      const sourceSegments = hasData ? list : placeholderSegments();
+
+      const segments = sourceSegments.map((segment, idx) => {
         return {
           ...segment,
           bet: Number(segment.bet) || 1,
@@ -167,12 +180,19 @@
         baseHTML: stripEl.innerHTML,
         repeats: 1
       };
-      renderLegend(segments);
+      if (hasData) {
+        renderLegend(segments);
+        if (rememberSnapshot) {
+          lastStripSnapshot = cloneSegments(segments);
+        }
+      } else {
+        renderLegend([]);
+      }
     }
 
     function prepareStripForSpin(laps) {
       if (!stripEl || !stripMeta?.baseHTML) return 1;
-      const repeats = Math.max(2, laps + 1);
+      const repeats = Math.max(3, laps + 2);
       let combined = '';
       for (let i = 0; i < repeats; i++) {
         combined += stripMeta.baseHTML;
@@ -288,9 +308,16 @@
           else throw new Error('Не удалось получить игроков');
         }
         const data = await resp.json();
-        players = Array.isArray(data.players) ? data.players : [];
+        const incomingPlayers = Array.isArray(data.players) ? data.players : [];
+        players = incomingPlayers;
         if (!isAnimating) {
-          buildStrip(players);
+          if (incomingPlayers.length) {
+            buildStrip(incomingPlayers);
+          } else if (lastStripSnapshot.length) {
+            buildStrip(lastStripSnapshot, { rememberSnapshot: false });
+          } else {
+            buildStrip([]);
+          }
         }
 
         // Пересчитываем локальную метку nextSpinTimestamp:
@@ -312,6 +339,7 @@
     }
 
     async function loadRouletteHistory() {
+      if (historyLocked) return;
       try {
         const resp = await fetch(`${BASE_URL}/roulette/history`, { credentials: 'include' });
         if (!resp.ok) {
@@ -395,6 +423,7 @@
     async function animateSpin() {
       if (isAnimating) return;
       isAnimating = true;
+      historyLocked = true;
 
       let resultData;
       try {
@@ -433,6 +462,14 @@
       if (!stripMeta) {
         buildStrip(spinPlayers);
       }
+
+      if (!stripMeta) {
+        showMessage('Ошибка визуализации рулетки.', 'red');
+        isAnimating = false;
+        historyLocked = false;
+        return;
+      }
+
       const { pxPerTicket, patternWidth } = stripMeta || { pxPerTicket: 4, patternWidth: totalBet * 4 };
       const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
       const minTurns = 3;
@@ -467,8 +504,8 @@
         refreshBalance()
           .finally(() => {
             players = [];
-            buildStrip([]);
             isAnimating = false;
+            historyLocked = false;
             loadRouletteHistory();
           });
       }
@@ -524,7 +561,13 @@
 
         players = data.players;
         if (!isAnimating) {
-          buildStrip(players);
+          if (players.length) {
+            buildStrip(players);
+          } else if (lastStripSnapshot.length) {
+            buildStrip(lastStripSnapshot, { rememberSnapshot: false });
+          } else {
+            buildStrip([]);
+          }
         }
 
         await refreshBalance();
