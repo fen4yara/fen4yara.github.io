@@ -117,40 +117,70 @@
       }
 
       const segments = list.map((segment, idx) => {
-        if (!segment.color) {
-          segment.color = COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length];
-        }
-        return segment;
+        return {
+          ...segment,
+          bet: Number(segment.bet) || 1,
+          color: segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length]
+        };
       });
 
-      const totalBet = segments.reduce((s, p) => s + (p.bet || 1), 0) || 1;
-      const targetPatternWidth = 1200;
-      const minPx = 3;
-      const maxPx = 40;
-      const pxPerTicket = Math.min(maxPx, Math.max(minPx, targetPatternWidth / totalBet));
-      const patternWidth = totalBet * pxPerTicket;
+      const totalBet = segments.reduce((s, p) => s + p.bet, 0) || 1;
+      const targetPatternWidth = 1400;
+      const minPxPerTicket = 4;
+      const maxPxPerTicket = 28;
+      const pxPerTicket = Math.min(maxPxPerTicket, Math.max(minPxPerTicket, targetPatternWidth / totalBet));
 
-      const repeats = 8;
-      for (let r = 0; r < repeats; r++) {
-        segments.forEach((segment) => {
-          const segEl = document.createElement('div');
-          segEl.className = 'roulette-segment';
-          segEl.style.backgroundColor = segment.color;
-          const width = Math.max(40, (segment.bet || 1) * pxPerTicket);
-          segEl.style.width = `${width}px`;
+      let cumulativeTickets = 0;
+      let patternWidth = 0;
+      const fragment = document.createDocumentFragment();
 
-          const label = document.createElement('span');
-          label.className = 'roulette-segment-name';
-          label.textContent = segment.username;
-          segEl.appendChild(label);
+      segments.forEach((segment) => {
+        const segmentWidth = segment.bet * pxPerTicket;
+        const segEl = document.createElement('div');
+        segEl.className = 'roulette-segment';
+        segEl.style.backgroundColor = segment.color;
+        segEl.style.width = `${segmentWidth}px`;
 
-          stripEl.appendChild(segEl);
-        });
-      }
+        const label = document.createElement('span');
+        label.className = 'roulette-segment-name';
+        label.textContent = segment.username;
+        segEl.appendChild(label);
 
-      stripMeta = { totalBet, pxPerTicket, patternWidth };
-      renderLegend(segments);
+        fragment.appendChild(segEl);
+
+        segment.startTicket = cumulativeTickets;
+        segment.endTicket = cumulativeTickets + segment.bet;
+        segment.startPx = patternWidth;
+        segment.endPx = patternWidth + segmentWidth;
+
+        cumulativeTickets += segment.bet;
+        patternWidth += segmentWidth;
+      });
+
+      stripEl.appendChild(fragment);
       stripEl.style.transform = 'translateX(0px)';
+      stripMeta = {
+        totalBet,
+        pxPerTicket,
+        patternWidth,
+        segments,
+        baseHTML: stripEl.innerHTML,
+        repeats: 1
+      };
+      renderLegend(segments);
+    }
+
+    function prepareStripForSpin(laps) {
+      if (!stripEl || !stripMeta?.baseHTML) return 1;
+      const repeats = Math.max(2, laps + 1);
+      let combined = '';
+      for (let i = 0; i < repeats; i++) {
+        combined += stripMeta.baseHTML;
+      }
+      stripEl.innerHTML = combined;
+      stripMeta.repeats = repeats;
+      stripEl.style.transform = 'translateX(0px)';
+      return repeats;
     }
 
     // Рисуем легенду
@@ -348,6 +378,20 @@
     }
 
     // 4) Анимация спина
+    async function refreshBalance() {
+      try {
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось обновить баланс');
+        const userData = await resp.json();
+        user = userData;
+        balanceEl.textContent = formatCoins(user.balance);
+        return userData;
+      } catch (err) {
+        console.error('refreshBalance:', err);
+        return null;
+      }
+    }
+
     async function animateSpin() {
       if (isAnimating) return;
       isAnimating = true;
@@ -378,7 +422,7 @@
         return;
       }
 
-      showMessage('Крутим…');
+      showMessage('Колесо крутится…');
 
       const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0) || 1;
       const winningTicket = typeof resultData.winningTicket === 'number'
@@ -391,17 +435,18 @@
       }
       const { pxPerTicket, patternWidth } = stripMeta || { pxPerTicket: 4, patternWidth: totalBet * 4 };
       const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
-      const totalStripWidth = stripEl?.scrollWidth || patternWidth * 8;
-      const maxTranslate = Math.max(totalStripWidth - viewportWidth, 0);
-      const ticketOffsetPx = clampedTicket * pxPerTicket;
       const minTurns = 3;
       const maxTurns = 6;
       const laps = minTurns + Math.floor(Math.random() * (maxTurns - minTurns + 1));
+      const repeats = prepareStripForSpin(laps);
+      const totalStripWidth = patternWidth * repeats;
+      const maxTranslate = Math.max(totalStripWidth - viewportWidth, 0);
+      const ticketOffsetPx = clampedTicket * pxPerTicket;
       const travelDistance = laps * patternWidth + ticketOffsetPx;
       const desiredTranslate = travelDistance - viewportWidth / 2;
       const finalTranslate = Math.min(Math.max(desiredTranslate, 0), maxTranslate);
 
-      const spinDuration = 3000;
+      const spinDuration = 5000;
       const startTime = performance.now();
 
       function frame(now) {
@@ -419,17 +464,10 @@
           ? ` (билет ${winningTicket.toFixed(2)})`
           : '';
         showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${formatCandy(totalPot)}${ticketNote}`, 'green');
-        fetch(`${BASE_URL}/check-auth`, { credentials: 'include' })
-          .then(r2 => {
-            if (!r2.ok) throw new Error('Не удалось обновить баланс');
-            return r2.json();
-          })
-          .then(userData => {
-            user.balance = userData.balance;
-            balanceEl.textContent = formatCoins(user.balance);
-          })
-          .catch(err => console.error(err))
+        refreshBalance()
           .finally(() => {
+            players = [];
+            buildStrip([]);
             isAnimating = false;
             loadRouletteHistory();
           });
@@ -489,12 +527,7 @@
           buildStrip(players);
         }
 
-        const check = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-        if (check.ok) {
-          const upd = await check.json();
-          user.balance = upd.balance;
-        balanceEl.textContent = formatCoins(user.balance);
-        }
+        await refreshBalance();
         showMessage('Вы в игре. Ждём спина...', '#333');
         lastBet = betValue;
         document.getElementById('bet').value = betValue;

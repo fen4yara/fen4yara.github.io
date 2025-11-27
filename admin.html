@@ -286,6 +286,7 @@
         renderUsers(users);
         togglePanels(true);
         initPromocodes();
+        initWithdrawals();
       } catch (err) {
         adminLoginMessage.textContent = err.message;
         adminLoginMessage.className = 'message error';
