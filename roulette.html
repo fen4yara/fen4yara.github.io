@@ -121,9 +121,9 @@
     }
 
     function drawWheel(segments) {
-      if (!wheelCanvas || !wheelCtx) return;
-      const containerWidth = wheelEl ? wheelEl.clientWidth : 320;
-      const size = Math.min(Math.max(containerWidth, 240), 420);
+      if (!wheelCanvas || !wheelCtx || !wheelEl) return;
+      const containerSize = Math.min(wheelEl.clientWidth, wheelEl.clientHeight) - 36;
+      const size = Math.min(Math.max(containerSize, 240), 420);
       const dpr = window.devicePixelRatio || 1;
       wheelCanvas.width = size * dpr;
       wheelCanvas.height = size * dpr;

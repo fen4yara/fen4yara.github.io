@@ -627,8 +627,12 @@ button.cashout {
 }
 
 .roulette-wheel-spin {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 36px);
+  height: calc(100% - 36px);
   border-radius: 50%;
   transition: transform 0s;
   will-change: transform;
@@ -653,6 +657,7 @@ button.cashout {
   border-bottom: 26px solid var(--accent-strong);
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
   pointer-events: none;
+  z-index: 10;
 }
 
 .plinko-layout {
