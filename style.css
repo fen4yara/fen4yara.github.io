@@ -499,6 +499,12 @@ button.cashout {
   color: var(--text-muted);
 }
 
+@media (max-width: 768px) {
+  .roulette-wheel-spin {
+      right: 9%;
+  }
+}
+
 .inline-form {
   display: flex;
   gap: 12px;
