@@ -166,6 +166,23 @@ p {
   transition: border 0.2s, transform 0.2s;
 }
 
+.input-field:not(select) {
+  /* для input и textarea */
+}
+
+select.input-field {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23f5f7ff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+}
+
+select.input-field:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237f5af0' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+}
+
 .input-field:focus {
   outline: none;
   border-color: var(--accent);
@@ -372,13 +389,33 @@ button.cashout {
 }
 
 .history-card .history-item {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 6px 0;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 0.9rem;
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.history-card .history-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
 }
 
 .history-card .history-item:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.history-card .history-item.clickable {
+  cursor: pointer;
+}
+
+.history-card .history-item.clickable:hover {
+  background: rgba(127, 90, 240, 0.12);
+  border-color: rgba(127, 90, 240, 0.25);
 }
 
 .history-players {
@@ -579,9 +616,10 @@ button.cashout {
 }
 
 .history-item.highlight {
-  border: 1px solid rgba(127, 90, 240, 0.25);
-  border-radius: 16px;
-  padding: 12px;
+  border: 1px solid rgba(127, 90, 240, 0.35);
+  background: rgba(127, 90, 240, 0.08);
+  border-radius: 14px;
+  padding: 12px 16px;
 }
 
 .quick-bet-buttons {
@@ -669,6 +707,12 @@ button.cashout {
   align-items: start;
 }
 
+@media (min-width: 900px) {
+  .plinko-layout {
+    grid-template-columns: 320px 1fr;
+  }
+}
+
 .plinko-board-card {
   display: flex;
   flex-direction: column;
@@ -678,14 +722,15 @@ button.cashout {
 
 .plinko-board {
   position: relative;
-  width: min(100%, 420px);
-  height: 420px;
+  width: min(100%, 600px);
+  height: 600px;
   border-radius: 28px;
   background: radial-gradient(circle at top, rgba(127, 90, 240, 0.25), rgba(8, 8, 24, 0.8));
   border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
-  padding: 16px;
+  padding: 20px;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.35);
+  margin: 0 auto;
 }
 
 .plinko-pegs {
@@ -697,10 +742,12 @@ button.cashout {
 }
 
 .plinko-row {
+  position: absolute;
   display: flex;
-  justify-content: space-evenly;
+  justify-content: center;
   align-items: center;
   width: 100%;
+  left: 0;
 }
 
 .plinko-peg {
@@ -713,16 +760,13 @@ button.cashout {
 
 .plinko-ball {
   position: absolute;
-  top: 16px;
-  left: 50%;
   width: 24px;
   height: 24px;
   border-radius: 50%;
   background: radial-gradient(circle, #fff, var(--accent-strong));
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  transform: translate(-50%, -50%);
-  transition: transform 0.22s ease-in;
   pointer-events: none;
+  z-index: 10;
 }
 
 .plinko-ball.hidden {
@@ -738,11 +782,12 @@ button.cashout {
 
 .plinko-slot {
   text-align: center;
-  padding: 6px 4px;
-  border-radius: 10px;
+  padding: 8px 6px;
+  border-radius: 12px;
   font-size: 0.85rem;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
 }
 
 .plinko-slot.highlight {

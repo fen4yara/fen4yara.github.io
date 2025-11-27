@@ -833,6 +833,26 @@ app.get('/admin/users/:username/profile', requireAdmin, (req, res) => {
   const yoomoneyPayments = readYooMoneyPayments().filter((p) => p.username === username);
   const withdrawals = readWithdrawals().filter((w) => w.username === username);
   const games = collectUserGameHistory(username);
+  const promocodeUsage = readPromocodeUsage();
+  // Получаем список промокодов, использованных пользователем
+  const userPromocodes = [];
+  Object.keys(promocodeUsage).forEach((key) => {
+    if (key.endsWith('_timestamps')) {
+      const code = key.replace('_timestamps', '');
+      const timestamps = promocodeUsage[key];
+      if (timestamps && typeof timestamps === 'object' && timestamps[username]) {
+        userPromocodes.push({ code, activatedAt: timestamps[username] });
+      }
+    } else if (Array.isArray(promocodeUsage[key]) && promocodeUsage[key].includes(username)) {
+      // Если есть массив пользователей, но нет временных меток
+      const code = key;
+      const timestampKey = code + '_timestamps';
+      const activatedAt = promocodeUsage[timestampKey]?.[username] || null;
+      if (!userPromocodes.find(p => p.code === code)) {
+        userPromocodes.push({ code, activatedAt });
+      }
+    }
+  });
   res.json({
     user: {
       username: user.username,
@@ -843,7 +863,8 @@ app.get('/admin/users/:username/profile', requireAdmin, (req, res) => {
     deposits,
     yoomoneyPayments,
     withdrawals,
-    games
+    games,
+    promocodes: userPromocodes
   });
 });
 
@@ -2105,6 +2126,13 @@ app.post('/promocode/activate', (req, res) => {
 
   if (!usage[username]) usage[username] = [];
   usage[username].push(promocode.code.toLowerCase());
+  
+  // Сохраняем временную метку активации
+  const codeLower = promocode.code.toLowerCase();
+  const timestampKey = codeLower + '_timestamps';
+  if (!usage[timestampKey]) usage[timestampKey] = {};
+  usage[timestampKey][username] = Date.now();
+  
   writePromocodeUsage(usage);
 
   const newBalance = user.balance + promocode.reward;

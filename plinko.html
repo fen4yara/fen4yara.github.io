@@ -40,7 +40,7 @@
         <p id="plinkoMessage" class="message"></p>
       </article>
 
-      <article class="glass-card plinko-board-card">
+      <article class="glass-card plinko-board-card" style="grid-column: 1 / -1;">
         <div class="plinko-board" id="plinkoBoard">
           <div class="plinko-pegs" id="plinkoPegLayer"></div>
           <div class="plinko-ball hidden" id="plinkoBall"></div>
@@ -48,7 +48,7 @@
         <div class="plinko-payouts" id="plinkoPayouts"></div>
       </article>
 
-      <article class="glass-card history-card">
+      <article class="glass-card history-card" style="grid-column: 1 / -1;">
         <p class="eyebrow">Последние падения</p>
         <div id="plinkoHistoryList" class="history-list"></div>
       </article>
@@ -136,14 +136,23 @@
     function renderBoard() {
       pegLayer.innerHTML = '';
       const rows = selectedRows;
+      const boardWidth = boardEl.clientWidth - 40; // учитываем padding
+      const boardHeight = boardEl.clientHeight - 40;
+      const rowHeight = boardHeight / (rows + 1);
+      
       for (let r = 0; r < rows; r++) {
         const rowEl = document.createElement('div');
         rowEl.className = 'plinko-row';
-        for (let c = 0; c <= r; c++) {
+        const pegsInRow = r + 1;
+        const spacing = boardWidth / (pegsInRow + 1);
+        
+        for (let c = 0; c < pegsInRow; c++) {
           const peg = document.createElement('span');
           peg.className = 'plinko-peg';
+          peg.style.left = `${spacing * (c + 1) - 6}px`; // центрируем peg
           rowEl.appendChild(peg);
         }
+        rowEl.style.top = `${(r + 1) * rowHeight - 6}px`; // позиционируем ряд
         pegLayer.appendChild(rowEl);
       }
       resetBall();
@@ -230,23 +239,55 @@
 
     function animatePath(path, bucketIndex) {
       return new Promise((resolve) => {
-        const steps = Array.isArray(path) && path.length ? path : [selectedRows / 2];
-        const duration = 220;
+        if (!Array.isArray(path) || path.length === 0) {
+          // Если путь пустой, используем центр
+          path = Array(selectedRows + 1).fill(selectedRows / 2);
+        }
+        const duration = 150;
         isAnimating = true;
         ballEl.classList.remove('hidden');
-        const width = boardEl.clientWidth;
-        const height = boardEl.clientHeight;
-        const rowHeight = height / (selectedRows + 2);
+        const boardPadding = 20;
+        const width = boardEl.clientWidth - boardPadding * 2;
+        const height = boardEl.clientHeight - boardPadding * 2;
+        const rowHeight = height / (selectedRows + 1);
+        const ballSize = 24;
+        
+        // Начальная позиция шарика - по центру сверху
+        const startX = width / 2;
+        const startY = 0;
+        ballEl.style.left = `${boardPadding + startX - ballSize / 2}px`;
+        ballEl.style.top = `${boardPadding + startY}px`;
+        ballEl.style.transition = '';
 
-        steps.forEach((value, idx) => {
+        path.forEach((value, idx) => {
           setTimeout(() => {
-            const ratio = selectedRows === 0 ? 0.5 : value / selectedRows;
-            const x = ratio * width;
-            const y = idx * rowHeight;
-            ballEl.style.transform = `translate(${x - 12}px, ${y}px)`;
-            if (idx === steps.length - 1) {
-              highlightSlot(bucketIndex);
-              setTimeout(resolve, 200);
+            // value - это позиция X в единицах от 0 до rows (где rows/2 - центр)
+            // Преобразуем в пиксели с учетом ширины доски
+            // value может быть от 0 до rows, где rows/2 - центр
+            let normalizedX;
+            if (selectedRows === 0) {
+              normalizedX = 0.5;
+            } else {
+              // Нормализуем value от 0 до 1, где 0.5 - центр
+              normalizedX = value / selectedRows;
+            }
+            
+            // Рассчитываем позицию X с учетом того, что центр доски = rows/2
+            // Ширина доски должна соответствовать количеству рядов
+            const maxX = width;
+            const x = normalizedX * maxX;
+            const y = (idx + 1) * rowHeight;
+            
+            // Позиционируем шарик по центру его размера
+            ballEl.style.left = `${boardPadding + x - ballSize / 2}px`;
+            ballEl.style.top = `${boardPadding + y - ballSize / 2}px`;
+            ballEl.style.transition = `left ${duration}ms cubic-bezier(0.4, 0, 0.2, 1), top ${duration}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+            
+            if (idx === path.length - 1) {
+              setTimeout(() => {
+                highlightSlot(bucketIndex);
+                setTimeout(resolve, 300);
+              }, duration);
             }
           }, idx * duration);
         });
@@ -255,7 +296,8 @@
 
     function resetBall() {
       ballEl.classList.add('hidden');
-      ballEl.style.transform = 'translate(-50%, -50%)';
+      ballEl.style.transform = 'translate(0, 0)';
+      ballEl.style.transition = '';
       highlightedSlot = null;
       Array.from(payoutsEl.children).forEach((slot) => slot.classList.remove('highlight'));
     }

@@ -86,7 +86,7 @@
           <label style="display: block; margin-bottom: 8px; font-weight: 500;">Способ пополнения:</label>
           <div style="display: flex; gap: 8px;">
             <button id="depositMethodFree" class="btn btn-secondary" style="flex: 1;">Бесплатно (1-1.000 🍬)</button>
-            <button id="depositMethodYooMoney" class="btn btn-secondary" style="flex: 1;">YooMoney (1-50000 ₽)</button>
+            <button id="depositMethodYooMoney" class="btn btn-secondary" style="flex: 1;">Карта (2-50000 ₽)</button>
           </div>
         </div>
         <p class="muted" id="depositMethodDescription">Максимум 1.000 🍬 раз в час</p>
@@ -489,10 +489,10 @@
         depositMethodYooMoney.classList.remove('btn-secondary');
         depositMethodFree.classList.remove('btn-primary');
         depositMethodFree.classList.add('btn-secondary');
-        depositMethodDescription.textContent = 'Пополнение через YooMoney (1-50000 ₽)';
+        depositMethodDescription.textContent = 'Пополнение через Карту (2-50000 ₽)';
         depositAmount.min = '1';
         depositAmount.max = '50000';
-        depositAmount.placeholder = 'Сумма в рублях (1-50000)';
+        depositAmount.placeholder = 'Сумма в рублях (2-50000)';
       }
     }
 
@@ -567,7 +567,7 @@
       } else {
         // YooMoney пополнение
         if (!amount || amount < 1 || amount > 50000) {
-          depositMessage.textContent = 'Введите сумму от 1 до 50000 рублей';
+          depositMessage.textContent = 'Введите сумму от 2 до 50000 рублей';
           depositMessage.className = 'message error';
           return;
         }

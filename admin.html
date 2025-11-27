@@ -472,36 +472,87 @@
     }
 
     function renderUserProfileModal(data) {
-      const { user, deposits, yoomoneyPayments, withdrawals, games } = data;
+      const { user, deposits, yoomoneyPayments, withdrawals, games, promocodes } = data;
       const formatDate = (ts) => new Date(ts).toLocaleString('ru-RU');
+      const formatTime = (ts) => new Date(ts).toLocaleTimeString('ru-RU');
+      
+      const renderGameHistory = (gameName, gameData, formatter) => {
+        if (!gameData || !gameData.length) {
+          return `<div class="history-item muted">Нет записей</div>`;
+        }
+        return gameData.slice(-20).reverse().map(formatter).join('');
+      };
+      
       userProfileContent.innerHTML = `
         <div class="history-item"><strong>${user.username}</strong> · баланс ${formatCandy(user.balance)} ${user.banned ? '(заблокирован)' : ''}<br/>IP: ${user.ip || '—'}</div>
+        
         <h3>Пополнения</h3>
         ${renderSimpleList(
           deposits.slice(-10).reverse(),
           (d) => `<li>${formatDate(d.timestamp)} · ${formatSignedCandy(d.amount)} (${d.method || 'free'})</li>`,
           'Нет пополнений'
         )}
+        
         <h3>YooMoney платежи</h3>
         ${renderSimpleList(
           yoomoneyPayments.slice(-10).reverse(),
           (p) => `<li>${formatDate(p.createdAt)} · ${p.amount}₽ (${p.status})</li>`,
           'Нет платежей YooMoney'
         )}
+        
         <h3>Выводы (СБП)</h3>
         ${renderSimpleList(
           withdrawals.slice(-10).reverse(),
           (w) => `<li>${formatDate(w.createdAt)} · ${w.amount}₽ → ${w.status}</li>`,
           'Заявок на вывод нет'
         )}
-        <h3>Игры</h3>
-        <div class="history-item">
-          <strong>Краш:</strong> ${games.crash.length}
-          · <strong>Рулетка:</strong> ${games.roulette.length}
-          · <strong>Коинфлип:</strong> ${games.coinflip.length}
-          · <strong>Дайс:</strong> ${games.dice.length}
-          · <strong>Плинко:</strong> ${games.plinko.length}
-        </div>
+        
+        <h3>Промокоды (${promocodes?.length || 0})</h3>
+        ${renderSimpleList(
+          promocodes || [],
+          (p) => `<li>${p.code}${p.activatedAt ? ` · ${formatDate(p.activatedAt)}` : ''}</li>`,
+          'Промокоды не использовались'
+        )}
+        
+        <h3>Краш (${games.crash?.length || 0})</h3>
+        ${renderGameHistory('Краш', games.crash, (round) => {
+          const player = round.players?.find(p => p.username === user.username);
+          if (!player) return '';
+          const status = player.cashedOut 
+            ? `забрал x${player.cashoutCoef?.toFixed(2) || '—'} → ${player.winnings}🍬`
+            : 'проиграл';
+          return `<div class="history-item">${formatTime(round.timestamp)} · ставка ${formatCandy(player.bet)} · ${status} · краш x${round.crashPoint?.toFixed(2) || '—'}</div>`;
+        })}
+        
+        <h3>Рулетка (${games.roulette?.length || 0})</h3>
+        ${renderGameHistory('Рулетка', games.roulette, (round) => {
+          const player = round.players?.find(p => p.username === user.username);
+          if (!player) return '';
+          const won = round.winner === user.username;
+          return `<div class="history-item">${formatTime(round.timestamp)} · ставка ${formatCandy(player.bet)} · ${won ? `🏆 Победа (банк ${formatCandy(round.totalBet)})` : 'проигрыш'}</div>`;
+        })}
+        
+        <h3>Коинфлип (${games.coinflip?.length || 0})</h3>
+        ${renderGameHistory('Коинфлип', games.coinflip, (entry) => {
+          const side = entry.choice === 'tails' ? 'решка' : 'орёл';
+          const result = entry.result === 'tails' ? 'решка' : 'орёл';
+          const won = entry.win;
+          return `<div class="history-item">${formatTime(entry.timestamp)} · ставка ${formatCandy(entry.bet)} · выбрал ${side}, выпал ${result} · ${won ? '🏆 Победа' : 'проигрыш'}</div>`;
+        })}
+        
+        <h3>Дайс (${games.dice?.length || 0})</h3>
+        ${renderGameHistory('Дайс', games.dice, (entry) => {
+          const side = entry.side === 'less' ? 'Меньше' : 'Больше';
+          const won = entry.win;
+          return `<div class="history-item">${formatTime(entry.timestamp)} · ставка ${formatCandy(entry.bet)} · ${side} ${entry.percent}% · выпало ${entry.roll} · ${won ? '🏆 Победа' : 'проигрыш'}</div>`;
+        })}
+        
+        <h3>Плинко (${games.plinko?.length || 0})</h3>
+        ${renderGameHistory('Плинко', games.plinko, (entry) => {
+          const risk = entry.risk === 'low' ? 'низкий' : entry.risk === 'high' ? 'высокий' : 'средний';
+          const net = (entry.payout || 0) - (entry.bet || 0);
+          return `<div class="history-item">${formatTime(entry.timestamp)} · ставка ${formatCandy(entry.bet)} · риск ${risk} · ${entry.rows} рядов · x${entry.multiplier?.toFixed(2) || '—'} → ${formatSignedCandy(net)}</div>`;
+        })}
       `;
       userProfileModal.classList.remove('hidden');
     }
