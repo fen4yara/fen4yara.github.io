@@ -258,12 +258,7 @@
           else throw new Error('Не удалось получить игроков');
         }
         const data = await resp.json();
-        players = data.players;
-        if (!isAnimating) {
-          buildStrip(players);
-        }
-        const data = await resp.json();
-        players = data.players;
+        players = Array.isArray(data.players) ? data.players : [];
         if (!isAnimating) {
           buildStrip(players);
         }
