@@ -2021,7 +2021,7 @@ app.post('/plinko/play', (req, res) => {
   const bet = Number(payload.bet);
   const riskRaw = typeof payload.risk === 'string' ? payload.risk.toLowerCase() : 'medium';
   const rowsInt = Number(payload.rows) || 12;
-  const ballsCount = Math.min(Math.max(Number(payload.ballsCount) || 1, 1), 5);
+  const ballsCount = 1; // Всегда 1 шарик за раз (можно запускать несколько раз нажимая кнопку)
 
   if (!bet || !Number.isFinite(bet) || bet <= 0) {
     return res.status(400).json({ error: 'Некорректная ставка' });
@@ -2038,8 +2038,7 @@ app.post('/plinko/play', (req, res) => {
   if (user.banned === true) {
     return res.status(403).json({ error: 'Аккаунт заблокирован' });
   }
-  const totalBet = bet * ballsCount;
-  if (user.balance < totalBet) {
+  if (user.balance < bet) {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
@@ -2049,7 +2048,6 @@ app.post('/plinko/play', (req, res) => {
   const multipliers = ensurePlinkoMultipliers(risk, rowsInt);
   const results = [];
   let totalPayout = 0;
-  const ballsCount = Math.min(Math.max(Number(payload.ballsCount) || 1, 1), 1); // Всегда 1 шарик за раз
 
   for (let ballIdx = 0; ballIdx < ballsCount; ballIdx++) {
     let currentX = rowsInt / 2;
