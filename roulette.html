@@ -391,28 +391,26 @@
       }
       const { pxPerTicket, patternWidth } = stripMeta || { pxPerTicket: 4, patternWidth: totalBet * 4 };
       const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
+      const totalStripWidth = stripEl?.scrollWidth || patternWidth * 8;
+      const maxTranslate = Math.max(totalStripWidth - viewportWidth, 0);
       const ticketOffsetPx = clampedTicket * pxPerTicket;
       const minTurns = 3;
       const maxTurns = 6;
       const laps = minTurns + Math.floor(Math.random() * (maxTurns - minTurns + 1));
       const travelDistance = laps * patternWidth + ticketOffsetPx;
-      const finalTranslate = travelDistance - viewportWidth / 2;
+      const desiredTranslate = travelDistance - viewportWidth / 2;
+      const finalTranslate = Math.min(Math.max(desiredTranslate, 0), maxTranslate);
 
       const spinDuration = 3000;
       const startTime = performance.now();
 
       function frame(now) {
         const elapsed = now - startTime;
-      const t = Math.min(elapsed / spinDuration, 1);
-      const eased = easeOut(t);
-
-      if (!stripMeta) {
-        buildStrip(spinPlayers);
-      }
-      const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
-      const currentDistance = eased * finalTranslate;
-      const translateX = -currentDistance;
-      stripEl.style.transform = `translateX(${translateX}px)`;
+        const t = Math.min(elapsed / spinDuration, 1);
+        const eased = easeOut(t);
+        const currentDistance = eased * finalTranslate;
+        const translateX = -currentDistance;
+        stripEl.style.transform = `translateX(${translateX}px)`;
 
       if (t < 1) {
         requestAnimationFrame(frame);
