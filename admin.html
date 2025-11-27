@@ -136,6 +136,53 @@
       </div>
       <p id="withdrawalsMessage" class="message"></p>
     </section>
+
+    <section class="glass-card" id="gameConfigSection" style="display:none">
+      <div class="top-bar" style="gap:12px">
+        <div>
+          <p class="eyebrow">Управление конфигурацией игр</p>
+          <p class="muted">Настройте комиссии и параметры игр для увеличения прибыли казино.</p>
+        </div>
+        <button id="refreshGameConfigBtn" class="btn-secondary" style="width:auto">Обновить</button>
+      </div>
+
+      <div class="form-grid" style="margin-top: 20px;">
+        <h3>Комиссии игр</h3>
+        
+        <label class="muted" for="coinflipMultiplier">Коинфлип: Множитель при победе</label>
+        <input type="number" id="coinflipMultiplier" class="input-field" min="0.1" max="10" step="0.01" placeholder="1.95" />
+        <p class="muted" style="font-size:0.85rem; margin-top:-8px;">Текущее значение: 2.00x (без комиссии). Рекомендуется: 1.95x</p>
+        
+        <label class="muted" for="diceCommissionPercent">Дайс: Комиссия (%)</label>
+        <input type="number" id="diceCommissionPercent" class="input-field" min="0" max="50" step="0.1" placeholder="2" />
+        <p class="muted" style="font-size:0.85rem; margin-top:-8px;">Вычитается из коэффициента (например, 2% от кэф)</p>
+        
+        <label class="muted" for="rouletteCommissionPercent">Рулетка: Комиссия от банка (%)</label>
+        <input type="number" id="rouletteCommissionPercent" class="input-field" min="0" max="50" step="0.1" placeholder="3" />
+        <p class="muted" style="font-size:0.85rem; margin-top:-8px;">Вычитается из выигрыша победителя</p>
+        
+        <label class="muted" for="crashCommissionPercent">Краш: Комиссия (%)</label>
+        <input type="number" id="crashCommissionPercent" class="input-field" min="0" max="50" step="0.1" placeholder="2" />
+        <p class="muted" style="font-size:0.85rem; margin-top:-8px;">Вычитается из выигрыша при выводе</p>
+        
+        <button id="saveGameConfigBtn" class="btn-primary">Сохранить конфигурацию</button>
+        <p id="gameConfigMessage" class="message"></p>
+      </div>
+
+      <div class="form-grid" style="margin-top: 30px;">
+        <h3>Управление крашем</h3>
+        
+        <label class="muted" for="nextCrashPoint">Коэффициент для следующего раунда</label>
+        <input type="number" id="nextCrashPoint" class="input-field" min="1.01" step="0.01" placeholder="Оставьте пустым для случайного" />
+        <p class="muted" style="font-size:0.85rem; margin-top:-8px;">Если задано, следующий раунд краша будет с этим коэффициентом. Оставьте пустым для случайного.</p>
+        
+        <div style="display:flex; gap:10px;">
+          <button id="setNextCrashPointBtn" class="btn-primary" style="width:auto">Установить</button>
+          <button id="clearNextCrashPointBtn" class="btn-secondary" style="width:auto">Сбросить</button>
+        </div>
+        <p id="nextCrashPointMessage" class="message"></p>
+      </div>
+    </section>
   </div>
 
   <div id="userProfileModal" class="modal-overlay hidden">
@@ -175,6 +222,18 @@
     const userProfileModal = document.getElementById('userProfileModal');
     const userProfileContent = document.getElementById('userProfileContent');
     const userProfileModalClose = document.getElementById('userProfileModalClose');
+    const gameConfigSection = document.getElementById('gameConfigSection');
+    const coinflipMultiplier = document.getElementById('coinflipMultiplier');
+    const diceCommissionPercent = document.getElementById('diceCommissionPercent');
+    const rouletteCommissionPercent = document.getElementById('rouletteCommissionPercent');
+    const crashCommissionPercent = document.getElementById('crashCommissionPercent');
+    const saveGameConfigBtn = document.getElementById('saveGameConfigBtn');
+    const refreshGameConfigBtn = document.getElementById('refreshGameConfigBtn');
+    const gameConfigMessage = document.getElementById('gameConfigMessage');
+    const nextCrashPoint = document.getElementById('nextCrashPoint');
+    const setNextCrashPointBtn = document.getElementById('setNextCrashPointBtn');
+    const clearNextCrashPointBtn = document.getElementById('clearNextCrashPointBtn');
+    const nextCrashPointMessage = document.getElementById('nextCrashPointMessage');
 
     async function downloadAdminFile(endpoint, filename) {
       try {
@@ -249,6 +308,131 @@
       }
     }
 
+    async function initGameConfig() {
+      try {
+        await loadGameConfig();
+        gameConfigSection.style.display = '';
+        await loadNextCrashPoint();
+      } catch (err) {
+        console.warn('Game config unavailable:', err.message);
+        gameConfigSection.style.display = 'none';
+      }
+    }
+
+    async function loadGameConfig() {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/game-config`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось загрузить конфигурацию');
+        const config = await resp.json();
+        coinflipMultiplier.value = config.coinflipMultiplier || 1.95;
+        diceCommissionPercent.value = config.diceCommissionPercent || 2;
+        rouletteCommissionPercent.value = config.rouletteCommissionPercent || 3;
+        crashCommissionPercent.value = config.crashCommissionPercent || 2;
+      } catch (err) {
+        gameConfigMessage.textContent = err.message;
+        gameConfigMessage.className = 'message error';
+      }
+    }
+
+    async function saveGameConfig() {
+      try {
+        saveGameConfigBtn.disabled = true;
+        gameConfigMessage.textContent = '';
+        const config = {
+          coinflipMultiplier: Number(coinflipMultiplier.value),
+          diceCommissionPercent: Number(diceCommissionPercent.value),
+          rouletteCommissionPercent: Number(rouletteCommissionPercent.value),
+          crashCommissionPercent: Number(crashCommissionPercent.value)
+        };
+        const resp = await fetch(`${BASE_URL}/admin/game-config`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(config)
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Ошибка сохранения');
+        gameConfigMessage.textContent = 'Конфигурация сохранена!';
+        gameConfigMessage.className = 'message success';
+        setTimeout(() => {
+          gameConfigMessage.textContent = '';
+        }, 2000);
+      } catch (err) {
+        gameConfigMessage.textContent = err.message;
+        gameConfigMessage.className = 'message error';
+      } finally {
+        saveGameConfigBtn.disabled = false;
+      }
+    }
+
+    async function loadNextCrashPoint() {
+      try {
+        const resp = await fetch(`${BASE_URL}/admin/crash/next-point`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.nextCrashPoint) {
+          nextCrashPoint.value = data.nextCrashPoint;
+        } else {
+          nextCrashPoint.value = '';
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки следующего коэффициента краша:', err);
+      }
+    }
+
+    async function setNextCrashPoint() {
+      try {
+        setNextCrashPointBtn.disabled = true;
+        nextCrashPointMessage.textContent = '';
+        const value = nextCrashPoint.value.trim();
+        const crashPoint = value ? Number(value) : null;
+        const resp = await fetch(`${BASE_URL}/admin/crash/next-point`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ crashPoint })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Ошибка установки');
+        nextCrashPointMessage.textContent = data.message || 'Коэффициент установлен';
+        nextCrashPointMessage.className = 'message success';
+        setTimeout(() => {
+          nextCrashPointMessage.textContent = '';
+        }, 3000);
+      } catch (err) {
+        nextCrashPointMessage.textContent = err.message;
+        nextCrashPointMessage.className = 'message error';
+      } finally {
+        setNextCrashPointBtn.disabled = false;
+      }
+    }
+
+    async function clearNextCrashPoint() {
+      try {
+        clearNextCrashPointBtn.disabled = true;
+        nextCrashPointMessage.textContent = '';
+        const resp = await fetch(`${BASE_URL}/admin/crash/next-point`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ crashPoint: null })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Ошибка сброса');
+        nextCrashPoint.value = '';
+        nextCrashPointMessage.textContent = data.message || 'Коэффициент сброшен';
+        nextCrashPointMessage.className = 'message success';
+        setTimeout(() => {
+          nextCrashPointMessage.textContent = '';
+        }, 3000);
+      } catch (err) {
+        nextCrashPointMessage.textContent = err.message;
+        nextCrashPointMessage.className = 'message error';
+      } finally {
+        clearNextCrashPointBtn.disabled = false;
+      }
+    }
+
     async function init() {
       try {
         const users = await fetchUsers();
@@ -256,6 +440,7 @@
         togglePanels(true);
         initPromocodes();
         initWithdrawals();
+        initGameConfig();
       } catch (err) {
         console.warn('Admin auth check failed:', err.message);
         togglePanels(false);
@@ -287,6 +472,7 @@
         togglePanels(true);
         initPromocodes();
         initWithdrawals();
+        initGameConfig();
       } catch (err) {
         adminLoginMessage.textContent = err.message;
         adminLoginMessage.className = 'message error';
@@ -729,6 +915,11 @@
       adminLoginMessage.textContent = 'Вы вышли из панели.';
       adminLoginMessage.className = 'message';
     });
+
+    saveGameConfigBtn.addEventListener('click', saveGameConfig);
+    refreshGameConfigBtn.addEventListener('click', loadGameConfig);
+    setNextCrashPointBtn.addEventListener('click', setNextCrashPoint);
+    clearNextCrashPointBtn.addEventListener('click', clearNextCrashPoint);
 
     init();
   </script>

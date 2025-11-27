@@ -27,11 +27,52 @@ const DEPOSIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 час между пополн�
 
 const PLINKO_ROWS = [8, 9, 10, 11, 12, 13, 14, 15, 16];
 const PLINKO_RISKS = ['low', 'medium', 'high'];
-const PLINKO_RTP = { low: 0.97, medium: 0.95, high: 0.92 };
-const PLINKO_EDGE_POWER = { low: 0.8, medium: 1.2, high: 1.8 };
-const PLINKO_EDGE_BONUS = { low: 0.5, medium: 1.2, high: 2.0 };
-const PLINKO_BASE_MULTIPLIER = { low: 0.5, medium: 0.3, high: 0.1 };
+// RTP чуть меньше 1.0, чтобы казино было в плюсе
+const PLINKO_RTP = { low: 0.97, medium: 0.96, high: 0.95 };
+// Диапазоны множителей: low: 0.8-10x, medium: 0.5-80x, high: 0.2-1000x
+const PLINKO_MIN_MULT = { low: 0.8, medium: 0.5, high: 0.2 };
+const PLINKO_MAX_MULT = { low: 10, medium: 80, high: 1000 };
 const plinkoMultipliersCache = new Map();
+
+// Конфигурация комиссий казино
+const gameConfigFile = path.join(__dirname, 'data', 'game-config.json');
+
+function readGameConfig() {
+  try {
+    if (!fs.existsSync(gameConfigFile)) {
+      const defaultConfig = {
+        coinflipMultiplier: 1.95,
+        diceCommissionPercent: 2,
+        rouletteCommissionPercent: 3,
+        crashCommissionPercent: 2
+      };
+      writeGameConfig(defaultConfig);
+      return defaultConfig;
+    }
+    const data = fs.readFileSync(gameConfigFile, 'utf-8');
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('Ошибка чтения game-config.json:', err);
+    return {
+      coinflipMultiplier: 1.95,
+      diceCommissionPercent: 2,
+      rouletteCommissionPercent: 3,
+      crashCommissionPercent: 2
+    };
+  }
+}
+
+function writeGameConfig(config) {
+  try {
+    const dir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    fs.writeFileSync(gameConfigFile, JSON.stringify(config, null, 2));
+  } catch (err) {
+    console.error('Ошибка записи game-config.json:', err);
+  }
+}
+
+let gameConfig = readGameConfig();
 
 // --------------- CORS ---------------
 const corsOptions = {
@@ -309,38 +350,65 @@ function ensurePlinkoMultipliers(risk, rows) {
   }
   const buckets = rows + 1;
   const center = rows / 2;
-  const edgePower = PLINKO_EDGE_POWER[safeRisk] || PLINKO_EDGE_POWER.medium;
-  const edgeBonus = PLINKO_EDGE_BONUS[safeRisk] || PLINKO_EDGE_BONUS.medium;
-  const baseMultiplier = PLINKO_BASE_MULTIPLIER[safeRisk] || PLINKO_BASE_MULTIPLIER.medium;
+  const minMult = PLINKO_MIN_MULT[safeRisk] || PLINKO_MIN_MULT.medium;
+  const maxMult = PLINKO_MAX_MULT[safeRisk] || PLINKO_MAX_MULT.medium;
   
-  const raw = [];
+  // Создаем множители от минимума в центре до максимума на краях
+  const multipliers = [];
   for (let i = 0; i < buckets; i++) {
     const distance = Math.abs(i - center);
-    const normalized = center === 0 ? 0 : distance / center;
-    // Увеличиваем базовые множители
-    const baseValue = 0.5 + baseMultiplier * rows;
-    const edgeIntensity = Math.pow(normalized, edgePower) * (2 + edgeBonus);
-    const intensity = baseValue + edgeIntensity;
-    raw[i] = intensity;
+    const normalized = center === 0 ? 0 : distance / center; // 0 в центре, 1 на краях
+    
+    // Используем экспоненциальную функцию для плавного перехода
+    // Чем дальше от центра, тем выше множитель
+    // Для высокого риска более резкий переход к максимуму
+    const power = safeRisk === 'high' ? 2.5 : safeRisk === 'medium' ? 2.0 : 1.5;
+    const ratio = Math.pow(normalized, power);
+    
+    // Интерполируем от минимума к максимуму
+    let multiplier = minMult + (maxMult - minMult) * ratio;
+    
+    // Для крайних позиций устанавливаем максимум
+    if (i === 0 || i === buckets - 1) {
+      multiplier = maxMult;
+    }
+    // Для центра устанавливаем минимум
+    if (i === Math.floor(center) || (center % 1 !== 0 && (i === Math.floor(center) || i === Math.ceil(center)))) {
+      multiplier = minMult;
+    }
+    
+    multipliers.push(Number(multiplier.toFixed(2)));
   }
-  // Усиливаем края еще больше
-  raw[0] *= (2 + edgeBonus);
-  raw[buckets - 1] *= (2 + edgeBonus);
 
+  // Проверяем RTP и корректируем если нужно
   const probabilities = [];
   const denominator = Math.pow(2, rows);
   for (let i = 0; i < buckets; i++) {
     probabilities[i] = combination(rows, i) / denominator;
   }
-  const expectedBase = raw.reduce((sum, val, idx) => sum + val * probabilities[idx], 0);
+  const expectedValue = multipliers.reduce((sum, val, idx) => sum + val * probabilities[idx], 0);
   const targetRtp = PLINKO_RTP[safeRisk] || PLINKO_RTP.medium;
-  const scale = expectedBase ? targetRtp / expectedBase : 1;
-  const multipliers = raw.map((val) => {
-    const scaled = Math.max(0.2, val * scale);
-    return Number(scaled.toFixed(2));
+  const scale = expectedValue > 0 ? targetRtp / expectedValue : 1;
+  
+  // Применяем масштабирование, сохраняя диапазон
+  const scaled = multipliers.map((val, idx) => {
+    // Края всегда максимальные, центр всегда минимальный
+    if (idx === 0 || idx === buckets - 1) {
+      return maxMult;
+    }
+    if (idx === Math.floor(center) || (center % 1 !== 0 && idx === Math.ceil(center))) {
+      return minMult;
+    }
+    
+    // Для остальных применяем масштабирование
+    const scaledVal = val * scale;
+    // Ограничиваем значения диапазоном
+    const clamped = Math.max(minMult, Math.min(maxMult, scaledVal));
+    return Number(clamped.toFixed(2));
   });
-  plinkoMultipliersCache.set(key, multipliers);
-  return multipliers;
+  
+  plinkoMultipliersCache.set(key, scaled);
+  return scaled;
 }
 
 function buildPlinkoConfig() {
@@ -1438,12 +1506,19 @@ function runSpin() {
 
     const winUser = findUser(winnerEntry.username);
     if (winUser) {
-      updateUserBalance(winnerEntry.username, winUser.balance + totalBet);
+      const commission = totalBet * (gameConfig.rouletteCommissionPercent / 100);
+      const payout = Math.floor(totalBet - commission);
+      updateUserBalance(winnerEntry.username, winUser.balance + payout);
     }
 
+    const commission = totalBet * (gameConfig.rouletteCommissionPercent / 100);
+    const payout = Math.floor(totalBet - commission);
+    
     lastSpinResult = {
       winner: winnerEntry.username,
       totalBet: totalBet,
+      payout: payout,
+      commission: commission,
       timestamp: now,
       players: lastSpinPlayers,
       winningTicket  // <--- КЛЮЧЕВАЯ ВЕЩЬ ДЛЯ КЛИЕНТА
@@ -1574,6 +1649,8 @@ let currentCrash = {
   timerId: null       // setTimeout ID, чтобы можно было clearTimeout
 };
 
+let nextCrashPoint = null; // Заданный админом коэффициент для следующего раунда
+
 function getRandomColor() {
   const letters = '0123456789ABCDEF';
   let color = '#';
@@ -1584,6 +1661,14 @@ function getRandomColor() {
 }
 
 function generateCrashPoint() {
+  // Если админ задал коэффициент для следующего раунда, используем его
+  if (nextCrashPoint !== null && nextCrashPoint > 1) {
+    const cp = nextCrashPoint;
+    nextCrashPoint = null; // Сбрасываем после использования
+    return parseFloat(cp.toFixed(2));
+  }
+  
+  // Иначе генерируем случайный
   const rand = Math.random() * 100;
   let cp;
   if (rand <= 75) {
@@ -1822,8 +1907,10 @@ app.post('/crash/cashout', (req, res) => {
     return res.status(400).json({ error: 'Уже крашнулся, нет выплат' });
   }
 
-  // Иначе считаем выигрыш
-  const winnings = Math.floor(participant.bet * coefficient);
+  // Иначе считаем выигрыш с учетом комиссии
+  const baseWinnings = participant.bet * coefficient;
+  const commission = baseWinnings * (gameConfig.crashCommissionPercent / 100);
+  const winnings = Math.floor(baseWinnings - commission);
   const userObj = findUser(username);
   if (userObj) {
     updateUserBalance(username, userObj.balance + winnings);
@@ -1882,7 +1969,7 @@ app.post('/coinflip/play', (req, res) => {
 
   const result = Math.random() < 0.5 ? 'heads' : 'tails';
   const win = result === normalizedChoice;
-  const payout = win ? bet * 2 : 0;
+  const payout = win ? Math.floor(bet * gameConfig.coinflipMultiplier) : 0;
   let finalBalance = balanceAfterBet;
   if (win) {
     finalBalance += payout;
@@ -1965,7 +2052,8 @@ app.post('/dice/play', (req, res) => {
     threshold = Math.floor(((100 - percentNum) / 100) * 1000000);
   }
   const win = side === 'less' ? roll < threshold : roll >= threshold;
-  const multiplier = 100 / percentNum;
+  const baseMultiplier = 100 / percentNum;
+  const multiplier = baseMultiplier * (1 - gameConfig.diceCommissionPercent / 100);
   const payout = win ? Math.floor(bet * multiplier) : 0;
   let finalBalance = balanceAfterBet;
   if (win) {
@@ -2238,6 +2326,73 @@ app.get('/admin/download/withdrawals.json', requireAdmin, (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', 'attachment; filename="withdrawals.json"');
   res.sendFile(withdrawalsFile);
+});
+
+// ======= Админ: Управление конфигурацией игр =======
+app.get('/admin/game-config', requireAdmin, (req, res) => {
+  gameConfig = readGameConfig(); // Обновляем из файла
+  res.json(gameConfig);
+});
+
+app.patch('/admin/game-config', requireAdmin, (req, res) => {
+  const updates = req.body || {};
+  gameConfig = readGameConfig();
+  
+  if (updates.coinflipMultiplier !== undefined) {
+    const val = Number(updates.coinflipMultiplier);
+    if (!Number.isFinite(val) || val <= 0 || val > 10) {
+      return res.status(400).json({ error: 'Множитель коинфлипа должен быть от 0 до 10' });
+    }
+    gameConfig.coinflipMultiplier = val;
+  }
+  
+  if (updates.diceCommissionPercent !== undefined) {
+    const val = Number(updates.diceCommissionPercent);
+    if (!Number.isFinite(val) || val < 0 || val > 50) {
+      return res.status(400).json({ error: 'Комиссия дайса должна быть от 0 до 50%' });
+    }
+    gameConfig.diceCommissionPercent = val;
+  }
+  
+  if (updates.rouletteCommissionPercent !== undefined) {
+    const val = Number(updates.rouletteCommissionPercent);
+    if (!Number.isFinite(val) || val < 0 || val > 50) {
+      return res.status(400).json({ error: 'Комиссия рулетки должна быть от 0 до 50%' });
+    }
+    gameConfig.rouletteCommissionPercent = val;
+  }
+  
+  if (updates.crashCommissionPercent !== undefined) {
+    const val = Number(updates.crashCommissionPercent);
+    if (!Number.isFinite(val) || val < 0 || val > 50) {
+      return res.status(400).json({ error: 'Комиссия краша должна быть от 0 до 50%' });
+    }
+    gameConfig.crashCommissionPercent = val;
+  }
+  
+  writeGameConfig(gameConfig);
+  res.json(gameConfig);
+});
+
+// ======= Админ: Управление следующим коэффициентом краша =======
+app.post('/admin/crash/next-point', requireAdmin, (req, res) => {
+  const { crashPoint } = req.body;
+  if (crashPoint === null || crashPoint === undefined) {
+    nextCrashPoint = null;
+    return res.json({ message: 'Следующий коэффициент краша сброшен' });
+  }
+  
+  const val = Number(crashPoint);
+  if (!Number.isFinite(val) || val <= 1) {
+    return res.status(400).json({ error: 'Коэффициент должен быть больше 1' });
+  }
+  
+  nextCrashPoint = val;
+  res.json({ message: `Следующий коэффициент краша установлен: ${val.toFixed(2)}x`, crashPoint: val });
+});
+
+app.get('/admin/crash/next-point', requireAdmin, (req, res) => {
+  res.json({ nextCrashPoint });
 });
 
 // === По умолчанию — отдаём index.html на корень ===

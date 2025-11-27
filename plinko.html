@@ -84,7 +84,6 @@
 
     riskButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (isAnimating) return;
         selectedRisk = btn.dataset.risk;
         riskButtons.forEach((b) => b.classList.toggle('active', b === btn));
         renderPayouts();
