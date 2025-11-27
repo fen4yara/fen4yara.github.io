@@ -2043,12 +2043,13 @@ app.post('/plinko/play', (req, res) => {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  const balanceAfterBet = user.balance - totalBet;
+  const balanceAfterBet = user.balance - bet;
   updateUserBalance(username, balanceAfterBet);
 
   const multipliers = ensurePlinkoMultipliers(risk, rowsInt);
   const results = [];
   let totalPayout = 0;
+  const ballsCount = Math.min(Math.max(Number(payload.ballsCount) || 1, 1), 1); // Всегда 1 шарик за раз
 
   for (let ballIdx = 0; ballIdx < ballsCount; ballIdx++) {
     let currentX = rowsInt / 2;
@@ -2105,7 +2106,7 @@ app.post('/plinko/play', (req, res) => {
   res.json({
     results,
     totalPayout,
-    totalBet,
+    totalBet: bet,
     risk,
     rows: rowsInt,
     newBalance: finalBalance,

@@ -774,9 +774,6 @@ button.cashout {
 
 .plinko-row {
   position: absolute;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   width: 100%;
   left: 0;
 }
@@ -805,20 +802,24 @@ button.cashout {
 }
 
 .plinko-payouts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   width: 100%;
+  justify-content: center;
+  margin-top: 12px;
 }
 
 .plinko-slot {
   text-align: center;
-  padding: 8px 6px;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  padding: 6px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
+  min-width: 50px;
+  flex: 0 0 auto;
 }
 
 .plinko-slot.highlight {
