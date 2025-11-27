@@ -92,17 +92,47 @@
     const moreBtn = document.getElementById('diceMoreBtn');
     const quickBtns = document.querySelectorAll('.quick-btn');
 
-    function updateMultiplier() {
+    async function updateMultiplier() {
       const percent = Number(percentInput.value) || 50;
-      const multiplier = (100 / percent).toFixed(2);
-      multiplierEl.textContent = `${multiplier}x`;
+      const baseMultiplier = 100 / percent;
       
-      const bet = Number(betInput.value) || 0;
-      if (bet > 0) {
-        const payout = Math.floor(bet * multiplier);
-        payoutEl.textContent = formatCoins(payout);
-      } else {
-        payoutEl.textContent = formatCoins(0);
+      // Получаем комиссию с сервера
+      try {
+        const configResp = await fetch(`${BASE_URL}/admin/game-config`, { credentials: 'include' });
+        if (configResp.ok) {
+          const config = await configResp.json();
+          const diceCommission = config.diceCommissionPercent || 2;
+          const multiplier = baseMultiplier * (1 - diceCommission / 100);
+          multiplierEl.textContent = `${multiplier.toFixed(2)}x`;
+          
+          const bet = Number(betInput.value) || 0;
+          if (bet > 0) {
+            const payout = bet * multiplier;
+            payoutEl.textContent = formatCoins(payout, { decimals: 2 });
+          } else {
+            payoutEl.textContent = formatCoins(0, { decimals: 2 });
+          }
+        } else {
+          // Fallback если не удалось получить конфигурацию
+          multiplierEl.textContent = `${baseMultiplier.toFixed(2)}x`;
+          const bet = Number(betInput.value) || 0;
+          if (bet > 0) {
+            const payout = bet * baseMultiplier;
+            payoutEl.textContent = formatCoins(payout, { decimals: 2 });
+          } else {
+            payoutEl.textContent = formatCoins(0, { decimals: 2 });
+          }
+        }
+      } catch (err) {
+        // Fallback при ошибке
+        multiplierEl.textContent = `${baseMultiplier.toFixed(2)}x`;
+        const bet = Number(betInput.value) || 0;
+        if (bet > 0) {
+          const payout = bet * baseMultiplier;
+          payoutEl.textContent = formatCoins(payout, { decimals: 2 });
+        } else {
+          payoutEl.textContent = formatCoins(0, { decimals: 2 });
+        }
       }
 
       // Процент применяется к выбранной стороне
@@ -166,7 +196,7 @@
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         if (lastBet > 0) {
           betInput.value = lastBet;
           updateMultiplier();
@@ -206,7 +236,7 @@
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
         
         user.balance = data.newBalance;
-        balanceEl.textContent = formatCoins(data.newBalance);
+        balanceEl.textContent = formatCoins(data.newBalance, { decimals: 2 });
         lastBet = bet;
         
         statusEl.textContent = data.win

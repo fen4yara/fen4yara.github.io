@@ -318,6 +318,16 @@ function normalizeAmount(value) {
   if (!Number.isFinite(num)) {
     return null;
   }
+  // Округляем до сотых (2 знака после запятой)
+  return Math.round(num * 100) / 100;
+}
+
+function roundToCents(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+  // Округляем до сотых
   return Math.round(num * 100) / 100;
 }
 
@@ -688,7 +698,8 @@ function updateUserBalance(username, newBalance) {
   const users = readUsers();
   const idx = users.findIndex((u) => u.username === username);
   if (idx !== -1) {
-    users[idx].balance = newBalance;
+    // Округляем баланс до сотых
+    users[idx].balance = roundToCents(newBalance);
     writeUsers(users);
     return true;
   }
@@ -1506,8 +1517,8 @@ function runSpin() {
 
     const winUser = findUser(winnerEntry.username);
     if (winUser) {
-      const commission = totalBet * (gameConfig.rouletteCommissionPercent / 100);
-      const payout = Math.floor(totalBet - commission);
+      const commission = roundToCents(totalBet * (gameConfig.rouletteCommissionPercent / 100));
+      const payout = roundToCents(totalBet - commission);
       updateUserBalance(winnerEntry.username, winUser.balance + payout);
     }
 
@@ -1767,11 +1778,54 @@ function startNewCrashRound() {
 
 // ========== ЭНДПОЙНТЫ «КРАШ» ==========
 
+// Функция для проверки и выполнения автозабора
+function checkAutoCashouts() {
+  if (currentCrash.ended || !currentCrash.crashTime || !currentCrash.bettingEndTime) {
+    return;
+  }
+  
+  const now = Date.now();
+  // Проверяем только во время роста коэффициента
+  if (now < currentCrash.bettingEndTime || now >= currentCrash.crashTime) {
+    return;
+  }
+  
+  // Вычисляем текущий коэффициент
+  const elapsedSec = Math.max(0, (now - currentCrash.bettingEndTime) / 1000);
+  const currentCoef = 1 + BASE_SPEED * elapsedSec + 0.5 * ACCEL * elapsedSec * elapsedSec;
+  
+  // Проверяем всех игроков с автозабором
+  currentCrash.players.forEach((participant) => {
+    if (participant.cashedOut || !participant.autoCashout) {
+      return;
+    }
+    
+    // Если текущий коэффициент достиг или превысил целевой автозабора
+    if (currentCoef >= participant.autoCashout && currentCoef < currentCrash.crashPoint) {
+      // Выполняем автозабор
+      const baseWinnings = participant.bet * participant.autoCashout;
+      const commission = roundToCents(baseWinnings * (gameConfig.crashCommissionPercent / 100));
+      const winnings = roundToCents(baseWinnings - commission);
+      const userObj = findUser(participant.username);
+      if (userObj) {
+        updateUserBalance(participant.username, roundToCents(userObj.balance + winnings));
+      }
+      participant.cashedOut = true;
+      participant.cashoutCoef = participant.autoCashout;
+      participant.winnings = winnings;
+    }
+  });
+}
+
 // GET /crash/state → текущее состояние
 app.get('/crash/state', (req, res) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Не авторизован' });
   }
+  
+  // Проверяем автозаборы перед отправкой состояния
+  checkAutoCashouts();
+  
   res.json({
     players: currentCrash.players.map((p) => ({
       username: p.username,
@@ -1795,7 +1849,7 @@ app.post('/crash/join', (req, res) => {
     return res.status(401).json({ error: 'Не авторизован' });
   }
   const username = req.session.user.username;
-  const { bet } = req.body;
+  const { bet, autoCashout } = req.body;
   if (!bet || typeof bet !== 'number' || bet <= 0) {
     return res.status(400).json({ error: 'Некорректная ставка' });
   }
@@ -1823,25 +1877,32 @@ app.post('/crash/join', (req, res) => {
   }
 
   // Списываем баланс
-  updateUserBalance(username, user.balance - bet);
+  updateUserBalance(username, roundToCents(user.balance - bet));
 
   // Добавляем/увеличиваем ставку участника
   let existing = currentCrash.players.find((p) => p.username === username);
+  const autoCashoutValue = (autoCashout && typeof autoCashout === 'number' && autoCashout > 1) ? autoCashout : null;
   if (existing) {
-    existing.bet += bet;
+    existing.bet = roundToCents(existing.bet + bet);
+    if (autoCashoutValue) {
+      existing.autoCashout = autoCashoutValue;
+    }
   } else {
     currentCrash.players.push({
       username,
-      bet,
+      bet: roundToCents(bet),
       color: getRandomColor(),
       cashedOut: false,
       cashoutCoef: null,
-      winnings: 0
+      winnings: 0,
+      autoCashout: autoCashoutValue // Коэффициент для автозабора
     });
   }
 
+  const updatedUser = findUser(username);
   res.json({
     message: 'Ставка принята',
+    newBalance: updatedUser ? updatedUser.balance : user.balance,
     players: currentCrash.players.map((p) => ({
       username: p.username,
       bet: p.bet,
@@ -1909,8 +1970,8 @@ app.post('/crash/cashout', (req, res) => {
 
   // Иначе считаем выигрыш с учетом комиссии
   const baseWinnings = participant.bet * coefficient;
-  const commission = baseWinnings * (gameConfig.crashCommissionPercent / 100);
-  const winnings = Math.floor(baseWinnings - commission);
+  const commission = roundToCents(baseWinnings * (gameConfig.crashCommissionPercent / 100));
+  const winnings = roundToCents(baseWinnings - commission);
   const userObj = findUser(username);
   if (userObj) {
     updateUserBalance(username, userObj.balance + winnings);
@@ -1919,7 +1980,8 @@ app.post('/crash/cashout', (req, res) => {
   participant.cashoutCoef = coefficient;
   participant.winnings = winnings;
 
-  res.json({ winnings, newBalance: findUser(username).balance });
+  const updatedUser = findUser(username);
+  res.json({ winnings, newBalance: updatedUser ? updatedUser.balance : 0 });
 });
 
 // GET /crash/history → последние 5 раундов
@@ -1964,15 +2026,15 @@ app.post('/coinflip/play', (req, res) => {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  const balanceAfterBet = user.balance - bet;
+  const balanceAfterBet = roundToCents(user.balance - bet);
   updateUserBalance(username, balanceAfterBet);
 
   const result = Math.random() < 0.5 ? 'heads' : 'tails';
   const win = result === normalizedChoice;
-  const payout = win ? Math.floor(bet * gameConfig.coinflipMultiplier) : 0;
+  const payout = win ? roundToCents(bet * gameConfig.coinflipMultiplier) : 0;
   let finalBalance = balanceAfterBet;
   if (win) {
-    finalBalance += payout;
+    finalBalance = roundToCents(balanceAfterBet + payout);
     updateUserBalance(username, finalBalance);
   }
 
@@ -2035,7 +2097,7 @@ app.post('/dice/play', (req, res) => {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  const balanceAfterBet = user.balance - bet;
+  const balanceAfterBet = roundToCents(user.balance - bet);
   updateUserBalance(username, balanceAfterBet);
 
   // Генерируем число от 0 до 999999
@@ -2054,10 +2116,10 @@ app.post('/dice/play', (req, res) => {
   const win = side === 'less' ? roll < threshold : roll >= threshold;
   const baseMultiplier = 100 / percentNum;
   const multiplier = baseMultiplier * (1 - gameConfig.diceCommissionPercent / 100);
-  const payout = win ? Math.floor(bet * multiplier) : 0;
+  const payout = win ? roundToCents(bet * multiplier) : 0;
   let finalBalance = balanceAfterBet;
   if (win) {
-    finalBalance += payout;
+    finalBalance = roundToCents(balanceAfterBet + payout);
     updateUserBalance(username, finalBalance);
   }
 
@@ -2130,7 +2192,7 @@ app.post('/plinko/play', (req, res) => {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  const balanceAfterBet = user.balance - bet;
+  const balanceAfterBet = roundToCents(user.balance - bet);
   updateUserBalance(username, balanceAfterBet);
 
   const multipliers = ensurePlinkoMultipliers(risk, rowsInt);
@@ -2154,8 +2216,8 @@ app.post('/plinko/play', (req, res) => {
 
     const bucketIndex = Math.min(Math.max(rightsCount, 0), multipliers.length - 1);
     const multiplier = multipliers[bucketIndex] || 0;
-    const payout = multiplier > 0 ? Math.floor(bet * multiplier) : 0;
-    totalPayout += payout;
+    const payout = multiplier > 0 ? roundToCents(bet * multiplier) : 0;
+    totalPayout = roundToCents(totalPayout + payout);
 
     results.push({
       multiplier,
@@ -2184,7 +2246,7 @@ app.post('/plinko/play', (req, res) => {
 
   let finalBalance = balanceAfterBet;
   if (totalPayout > 0) {
-    finalBalance += totalPayout;
+    finalBalance = roundToCents(balanceAfterBet + totalPayout);
     updateUserBalance(username, finalBalance);
   }
   persistHistory();

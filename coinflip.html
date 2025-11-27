@@ -74,7 +74,7 @@
         const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!resp.ok) throw new Error('Не авторизован');
         user = await resp.json();
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         if (lastBet > 0) {
           betInput.value = lastBet;
         }
@@ -104,7 +104,7 @@
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
-        balanceEl.textContent = formatCoins(data.newBalance);
+        balanceEl.textContent = formatCoins(data.newBalance, { decimals: 2 });
         statusEl.textContent = data.win
           ? `🎉 Выпал ${formatSide(data.result)}. Выигрыш: ${formatCandy(data.payout)}`
           : `🤕 Выпал ${formatSide(data.result)}. Ставка проиграна`;

@@ -89,7 +89,7 @@
 
         const user = await response.json();
         document.getElementById('username').textContent = user.username;
-        document.getElementById('balance').textContent = formatCoins(user.balance);
+        document.getElementById('balance').textContent = formatCoins(user.balance, { decimals: 2 });
       } catch (err) {
         console.error('Auth error:', err);
         alert('Ошибка авторизации: ' + err.message);

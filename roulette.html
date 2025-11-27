@@ -400,7 +400,7 @@
         if (!resp.ok) throw new Error('Не удалось обновить баланс');
         const userData = await resp.json();
         user = userData;
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         return userData;
       } catch (err) {
         console.error('refreshBalance:', err);
@@ -504,7 +504,7 @@
         if (lastBet > 0) {
           document.getElementById('bet').value = lastBet;
         }
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         buildWheel([]);
 
         await fetchPlayersAndDraw();

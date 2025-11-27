@@ -118,7 +118,7 @@
       const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
       if (!resp.ok) throw new Error('Не авторизован');
       user = await resp.json();
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
 
       // инициализация UI
       actionBtn.disabled = false;
@@ -176,7 +176,13 @@
         const me = players.find((p) => p.username === user.username);
         if (me) {
           hasBet = true;
+          const wasCashedOut = hasCashedOut;
           hasCashedOut = !!me.cashedOut;
+          // Если произошел автозабор (стал cashedOut, но мы не знали об этом)
+          if (me.cashedOut && !wasCashedOut && me.winnings > 0) {
+            // Обновляем баланс через запрос к серверу
+            updateBalanceInUI();
+          }
         } else {
           hasBet = false;
           hasCashedOut = false;
@@ -342,17 +348,7 @@
       lastCoefBeforeCrash = coef;
     }
     
-    // Автовывод
-    if (autoCashoutTarget && hasBet && !hasCashedOut && coef >= autoCashoutTarget) {
-      const shouldContinue = serverNow < crashTime && !crashEnded;
-      handleCashout().then(() => {
-        // После автовывода продолжаем анимацию, если раунд еще идет
-        if (shouldContinue && !crashEnded) {
-          animationFrameId = requestAnimationFrame(animationTick);
-        }
-      });
-      return;
-    }
+    // Автовывод теперь обрабатывается на сервере, не нужно проверять здесь
     
     if (chartCtx) {
       pushCoefHistory(serverNow, coef);
@@ -498,7 +494,7 @@
       const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
       if (!resp.ok) throw new Error('Не авторизован');
       user = await resp.json();
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
     } catch {
       // игнорируем
     }
@@ -529,17 +525,18 @@
 
     try {
       actionBtn.disabled = true;
+      const autoCashoutValue = autoCashoutEl.value ? parseFloat(autoCashoutEl.value) : null;
       const resp = await fetch(`${BASE_URL}/crash/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ bet: betValue })
+        body: JSON.stringify({ bet: betValue, autoCashout: autoCashoutValue })
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Ошибка при ставке');
 
-      user.balance -= betValue;
-      balanceEl.textContent = user.balance;
+      user.balance = data.newBalance || (user.balance - betValue);
+      balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
 
       renderPlayers(data.players || []);
       bettingEndTime = data.bettingEndTime;
@@ -591,7 +588,7 @@
 
       showMessage(`✅ Вы забрали ${data.winnings} 🍬 (x${coefToTake.toFixed(2)})`, 'green');
       user.balance = data.newBalance;
-      balanceEl.textContent = user.balance;
+      balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
 
       const state = await fetch(`${BASE_URL}/crash/state`, { credentials: 'include' });
       const stData = await state.json();

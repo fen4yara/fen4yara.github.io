@@ -166,7 +166,7 @@
 
         user = await response.json();
         usernameEl.textContent = user.username;
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         await loadDepositStatus();
         await loadHistory();
 
@@ -193,7 +193,7 @@
         const data = await resp.json();
         if (data.status === 'success') {
           user.balance = data.balance;
-          balanceEl.textContent = formatCoins(user.balance);
+          balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
           await loadDepositStatus();
           await loadHistory();
           alert(`Платеж успешно обработан! Баланс пополнен на ${data.amount}₽.`);
@@ -208,7 +208,7 @@
               if (checkData.status === 'success') {
                 clearInterval(checkInterval);
                 user.balance = checkData.balance;
-                balanceEl.textContent = formatCoins(user.balance);
+                balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
                 await loadDepositStatus();
                 await loadHistory();
                 alert(`Платеж успешно обработан! Баланс пополнен на ${checkData.amount}₽.`);
@@ -552,7 +552,7 @@
           depositMessage.textContent = `Баланс пополнен на ${formatCandy(amount)}!`;
           depositMessage.className = 'message success';
           user.balance = data.newBalance;
-          balanceEl.textContent = formatCoins(user.balance);
+          balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
           await loadDepositStatus();
           await loadHistory();
           setTimeout(() => {
@@ -604,7 +604,7 @@
                 depositMessage.textContent = `Баланс пополнен на ${credited}₽!`;
                 depositMessage.className = 'message success';
                 user.balance = checkData.balance;
-                balanceEl.textContent = formatCoins(user.balance);
+                balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
                 await loadDepositStatus();
                 await loadHistory();
                 setTimeout(() => {
@@ -660,7 +660,7 @@
         withdrawMessage.textContent = data.message;
         withdrawMessage.className = 'message success';
         user.balance = data.balance;
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         await loadHistory();
         setTimeout(() => withdrawModal.classList.add('hidden'), 2000);
       } catch (err) {
@@ -695,7 +695,7 @@
         promocodeMessage.textContent = data.message;
         promocodeMessage.className = 'message success';
         user.balance = data.newBalance;
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
         promocodeInput.value = '';
         setTimeout(() => {
           promocodeMessage.textContent = '';

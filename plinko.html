@@ -105,7 +105,7 @@
         const authResp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
         if (!authResp.ok) throw new Error('Не авторизован');
         user = await authResp.json();
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
 
         const configResp = await fetch(`${BASE_URL}/plinko/config`, { credentials: 'include' });
         if (!configResp.ok) throw new Error('Не удалось получить конфигурацию');
@@ -235,7 +235,7 @@
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
 
         user.balance = data.newBalance;
-        balanceEl.textContent = formatCoins(user.balance);
+        balanceEl.textContent = formatCoins(user.balance, { decimals: 2 });
 
         const net = data.totalPayout - data.totalBet;
         const message = data.totalPayout > 0
