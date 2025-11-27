@@ -1388,7 +1388,12 @@ function runSpin() {
     lastSpinResult = null;
     lastSpinPlayers = null;
   } else {
-    lastSpinPlayers = roulettePlayers.map((p) => ({ ...p }));
+    // ДЕЛАЕМ ЧИСТЫЙ SNAPSHOT ИГРОКОВ
+    lastSpinPlayers = roulettePlayers.map((p) => ({
+      username: p.username,
+      bet: p.bet,
+      color: p.color
+    }));
 
     const totalBet = roulettePlayers.reduce((sum, p) => sum + p.bet, 0);
     const winningTicket = Math.random() * totalBet;
@@ -1413,7 +1418,7 @@ function runSpin() {
       totalBet: totalBet,
       timestamp: now,
       players: lastSpinPlayers,
-      winningTicket
+      winningTicket  // <--- КЛЮЧЕВАЯ ВЕЩЬ ДЛЯ КЛИЕНТА
     };
     rouletteHistory.unshift(lastSpinResult);
     if (rouletteHistory.length > MAX_ROULETTE_HISTORY) rouletteHistory.pop();
@@ -1430,6 +1435,7 @@ function runSpin() {
     spinTimeoutId = setTimeout(runSpin, spinInterval);
   }
 }
+
 
 // Первый спин стартует внутри /roulette/join при появлении второго игрока.
 
