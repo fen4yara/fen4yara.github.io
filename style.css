@@ -628,8 +628,8 @@ button.cashout {
 
 .roulette-wheel-spin {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  bottom: 10%;
+  right: 10%;
   transform: translate(-50%, -50%);
   width: calc(100% - 36px);
   height: calc(100% - 36px);
