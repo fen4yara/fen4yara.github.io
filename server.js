@@ -27,9 +27,10 @@ const DEPOSIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 час между пополн�
 
 const PLINKO_ROWS = [8, 9, 10, 11, 12, 13, 14, 15, 16];
 const PLINKO_RISKS = ['low', 'medium', 'high'];
-const PLINKO_RTP = { low: 0.985, medium: 0.965, high: 0.94 };
-const PLINKO_EDGE_POWER = { low: 1.1, medium: 1.35, high: 1.65 };
-const PLINKO_EDGE_BONUS = { low: 0.4, medium: 0.85, high: 1.35 };
+const PLINKO_RTP = { low: 0.97, medium: 0.95, high: 0.92 };
+const PLINKO_EDGE_POWER = { low: 0.8, medium: 1.2, high: 1.8 };
+const PLINKO_EDGE_BONUS = { low: 0.5, medium: 1.2, high: 2.0 };
+const PLINKO_BASE_MULTIPLIER = { low: 0.5, medium: 0.3, high: 0.1 };
 const plinkoMultipliersCache = new Map();
 
 // --------------- CORS ---------------
@@ -310,15 +311,21 @@ function ensurePlinkoMultipliers(risk, rows) {
   const center = rows / 2;
   const edgePower = PLINKO_EDGE_POWER[safeRisk] || PLINKO_EDGE_POWER.medium;
   const edgeBonus = PLINKO_EDGE_BONUS[safeRisk] || PLINKO_EDGE_BONUS.medium;
+  const baseMultiplier = PLINKO_BASE_MULTIPLIER[safeRisk] || PLINKO_BASE_MULTIPLIER.medium;
+  
   const raw = [];
   for (let i = 0; i < buckets; i++) {
     const distance = Math.abs(i - center);
     const normalized = center === 0 ? 0 : distance / center;
-    const intensity = 1 + Math.pow(normalized, edgePower) * (1 + edgeBonus);
+    // Увеличиваем базовые множители
+    const baseValue = 0.5 + baseMultiplier * rows;
+    const edgeIntensity = Math.pow(normalized, edgePower) * (2 + edgeBonus);
+    const intensity = baseValue + edgeIntensity;
     raw[i] = intensity;
   }
-  raw[0] *= 1 + edgeBonus;
-  raw[buckets - 1] *= 1 + edgeBonus;
+  // Усиливаем края еще больше
+  raw[0] *= (2 + edgeBonus);
+  raw[buckets - 1] *= (2 + edgeBonus);
 
   const probabilities = [];
   const denominator = Math.pow(2, rows);
@@ -329,7 +336,7 @@ function ensurePlinkoMultipliers(risk, rows) {
   const targetRtp = PLINKO_RTP[safeRisk] || PLINKO_RTP.medium;
   const scale = expectedBase ? targetRtp / expectedBase : 1;
   const multipliers = raw.map((val) => {
-    const scaled = Math.max(0.1, val * scale);
+    const scaled = Math.max(0.2, val * scale);
     return Number(scaled.toFixed(2));
   });
   plinkoMultipliersCache.set(key, multipliers);
@@ -2014,6 +2021,7 @@ app.post('/plinko/play', (req, res) => {
   const bet = Number(payload.bet);
   const riskRaw = typeof payload.risk === 'string' ? payload.risk.toLowerCase() : 'medium';
   const rowsInt = Number(payload.rows) || 12;
+  const ballsCount = Math.min(Math.max(Number(payload.ballsCount) || 1, 1), 5);
 
   if (!bet || !Number.isFinite(bet) || bet <= 0) {
     return res.status(400).json({ error: 'Некорректная ставка' });
@@ -2030,57 +2038,74 @@ app.post('/plinko/play', (req, res) => {
   if (user.banned === true) {
     return res.status(403).json({ error: 'Аккаунт заблокирован' });
   }
-  if (user.balance < bet) {
+  const totalBet = bet * ballsCount;
+  if (user.balance < totalBet) {
     return res.status(400).json({ error: 'Недостаточно средств' });
   }
 
-  const balanceAfterBet = user.balance - bet;
+  const balanceAfterBet = user.balance - totalBet;
   updateUserBalance(username, balanceAfterBet);
 
   const multipliers = ensurePlinkoMultipliers(risk, rowsInt);
-  let currentX = rowsInt / 2;
-  let rightsCount = 0;
-  const path = [currentX];
-  for (let i = 0; i < rowsInt; i++) {
-    const goRight = Math.random() >= 0.5;
-    if (goRight) {
-      rightsCount += 1;
-      currentX += 0.5;
-    } else {
-      currentX -= 0.5;
+  const results = [];
+  let totalPayout = 0;
+
+  for (let ballIdx = 0; ballIdx < ballsCount; ballIdx++) {
+    let currentX = rowsInt / 2;
+    let rightsCount = 0;
+    const path = [currentX];
+    for (let i = 0; i < rowsInt; i++) {
+      const goRight = Math.random() >= 0.5;
+      if (goRight) {
+        rightsCount += 1;
+        currentX += 0.5;
+      } else {
+        currentX -= 0.5;
+      }
+      path.push(currentX);
     }
-    path.push(currentX);
+
+    const bucketIndex = Math.min(Math.max(rightsCount, 0), multipliers.length - 1);
+    const multiplier = multipliers[bucketIndex] || 0;
+    const payout = multiplier > 0 ? Math.floor(bet * multiplier) : 0;
+    totalPayout += payout;
+
+    results.push({
+      multiplier,
+      payout,
+      bucket: bucketIndex,
+      path
+    });
+
+    const entry = {
+      username,
+      bet,
+      risk,
+      rows: rowsInt,
+      multiplier,
+      payout,
+      bucket: bucketIndex,
+      path,
+      timestamp: Date.now()
+    };
+    plinkoHistory.unshift(entry);
   }
 
-  const bucketIndex = Math.min(Math.max(rightsCount, 0), multipliers.length - 1);
-  const multiplier = multipliers[bucketIndex] || 0;
-  const payout = multiplier > 0 ? Math.floor(bet * multiplier) : 0;
+  if (plinkoHistory.length > MAX_PLINKO_HISTORY) {
+    plinkoHistory.splice(MAX_PLINKO_HISTORY);
+  }
+
   let finalBalance = balanceAfterBet;
-  if (payout > 0) {
-    finalBalance += payout;
+  if (totalPayout > 0) {
+    finalBalance += totalPayout;
     updateUserBalance(username, finalBalance);
   }
-
-  const entry = {
-    username,
-    bet,
-    risk,
-    rows: rowsInt,
-    multiplier,
-    payout,
-    bucket: bucketIndex,
-    path,
-    timestamp: Date.now()
-  };
-  plinkoHistory.unshift(entry);
-  if (plinkoHistory.length > MAX_PLINKO_HISTORY) plinkoHistory.pop();
   persistHistory();
 
   res.json({
-    multiplier,
-    payout,
-    bucket: bucketIndex,
-    path,
+    results,
+    totalPayout,
+    totalBet,
     risk,
     rows: rowsInt,
     newBalance: finalBalance,

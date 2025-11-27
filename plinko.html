@@ -36,19 +36,22 @@
         <label class="muted" for="rowsSelect">Количество рядов</label>
         <select id="rowsSelect" class="input-field"></select>
 
-        <button id="dropBtn" class="btn-primary" style="margin-top: 12px;">Бросить шар</button>
+        <label class="muted" for="ballsCount">Количество шариков</label>
+        <input type="number" id="ballsCount" min="1" max="5" value="1" class="input-field" />
+
+        <button id="dropBtn" class="btn-primary" style="margin-top: 12px;">Бросить шар(ы)</button>
         <p id="plinkoMessage" class="message"></p>
       </article>
 
-      <article class="glass-card plinko-board-card" style="grid-column: 1 / -1;">
+      <article class="glass-card plinko-board-card">
         <div class="plinko-board" id="plinkoBoard">
           <div class="plinko-pegs" id="plinkoPegLayer"></div>
-          <div class="plinko-ball hidden" id="plinkoBall"></div>
+          <div id="plinkoBallsContainer"></div>
         </div>
         <div class="plinko-payouts" id="plinkoPayouts"></div>
       </article>
 
-      <article class="glass-card history-card" style="grid-column: 1 / -1;">
+      <article class="glass-card history-card">
         <p class="eyebrow">Последние падения</p>
         <div id="plinkoHistoryList" class="history-list"></div>
       </article>
@@ -73,9 +76,10 @@
     const messageEl = document.getElementById('plinkoMessage');
     const pegLayer = document.getElementById('plinkoPegLayer');
     const boardEl = document.getElementById('plinkoBoard');
-    const ballEl = document.getElementById('plinkoBall');
+    const ballsContainer = document.getElementById('plinkoBallsContainer');
     const payoutsEl = document.getElementById('plinkoPayouts');
     const historyList = document.getElementById('plinkoHistoryList');
+    const ballsCountInput = document.getElementById('ballsCount');
 
     const riskTitles = {
       low: 'низкий',
@@ -136,26 +140,32 @@
     function renderBoard() {
       pegLayer.innerHTML = '';
       const rows = selectedRows;
-      const boardWidth = boardEl.clientWidth - 40; // учитываем padding
-      const boardHeight = boardEl.clientHeight - 40;
+      const boardPadding = 20;
+      const boardWidth = boardEl.clientWidth - boardPadding * 2;
+      const boardHeight = boardEl.clientHeight - boardPadding * 2;
       const rowHeight = boardHeight / (rows + 1);
       
+      // Расставляем препятствия правильно по ширине
       for (let r = 0; r < rows; r++) {
         const rowEl = document.createElement('div');
         rowEl.className = 'plinko-row';
         const pegsInRow = r + 1;
+        // Используем всю ширину доски для равномерного распределения
         const spacing = boardWidth / (pegsInRow + 1);
         
         for (let c = 0; c < pegsInRow; c++) {
           const peg = document.createElement('span');
           peg.className = 'plinko-peg';
-          peg.style.left = `${spacing * (c + 1) - 6}px`; // центрируем peg
+          // Центрируем каждый peg в своей ячейке
+          const x = spacing * (c + 1) - 6; // 6px = половина размера peg (12px)
+          peg.style.left = `${x}px`;
           rowEl.appendChild(peg);
         }
-        rowEl.style.top = `${(r + 1) * rowHeight - 6}px`; // позиционируем ряд
+        rowEl.style.top = `${boardPadding + (r + 1) * rowHeight - 6}px`;
+        rowEl.style.left = `${boardPadding}px`;
         pegLayer.appendChild(rowEl);
       }
-      resetBall();
+      clearAllBalls();
       renderPayouts();
     }
 
@@ -198,22 +208,25 @@
 
     async function playPlinko() {
       const bet = Number(betInput.value);
+      const ballsCount = Number(ballsCountInput.value) || 1;
       if (!bet || bet <= 0) {
         setMessage('Введите корректную ставку', 'error');
         return;
       }
-      if (bet > user.balance) {
+      const totalBet = bet * ballsCount;
+      if (totalBet > user.balance) {
         setMessage('Недостаточно средств', 'error');
         return;
       }
       setMessage('');
       dropBtn.disabled = true;
+      isAnimating = true;
       try {
         const resp = await fetch(`${BASE_URL}/plinko/play`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ bet, risk: selectedRisk, rows: selectedRows })
+          body: JSON.stringify({ bet, risk: selectedRisk, rows: selectedRows, ballsCount })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Ошибка ставки');
@@ -221,13 +234,16 @@
         user.balance = data.newBalance;
         balanceEl.textContent = formatCoins(user.balance);
 
-        const net = data.payout - bet;
-        const message = data.payout > 0
-          ? `🎉 x${data.multiplier.toFixed(2)} → ${formatSignedCandy(net)}`
+        const net = data.totalPayout - data.totalBet;
+        const message = data.totalPayout > 0
+          ? `🎉 ${ballsCount > 1 ? `${ballsCount} шариков: ` : ''}${formatSignedCandy(net)}`
           : 'Проигрыш. Попробуй снова';
-        setMessage(message, data.payout > 0 ? 'success' : 'muted');
+        setMessage(message, data.totalPayout > 0 ? 'success' : 'muted');
 
-        await animatePath(Array.isArray(data.path) ? data.path : [], data.bucket);
+        // Анимируем все шарики
+        await Promise.all(data.results.map((result, idx) => 
+          animatePath(result.path, result.bucket, idx * 200)
+        ));
         renderHistory(data.history || []);
       } catch (err) {
         setMessage(err.message || 'Ошибка', 'error');
@@ -237,20 +253,22 @@
       }
     }
 
-    function animatePath(path, bucketIndex) {
+    function animatePath(path, bucketIndex, delay = 0) {
       return new Promise((resolve) => {
         if (!Array.isArray(path) || path.length === 0) {
-          // Если путь пустой, используем центр
           path = Array(selectedRows + 1).fill(selectedRows / 2);
         }
         const duration = 150;
-        isAnimating = true;
-        ballEl.classList.remove('hidden');
         const boardPadding = 20;
         const width = boardEl.clientWidth - boardPadding * 2;
         const height = boardEl.clientHeight - boardPadding * 2;
         const rowHeight = height / (selectedRows + 1);
         const ballSize = 24;
+        
+        // Создаем новый элемент шарика
+        const ballEl = document.createElement('div');
+        ballEl.className = 'plinko-ball';
+        ballsContainer.appendChild(ballEl);
         
         // Начальная позиция шарика - по центру сверху
         const startX = width / 2;
@@ -261,24 +279,17 @@
 
         path.forEach((value, idx) => {
           setTimeout(() => {
-            // value - это позиция X в единицах от 0 до rows (где rows/2 - центр)
-            // Преобразуем в пиксели с учетом ширины доски
-            // value может быть от 0 до rows, где rows/2 - центр
             let normalizedX;
             if (selectedRows === 0) {
               normalizedX = 0.5;
             } else {
-              // Нормализуем value от 0 до 1, где 0.5 - центр
               normalizedX = value / selectedRows;
             }
             
-            // Рассчитываем позицию X с учетом того, что центр доски = rows/2
-            // Ширина доски должна соответствовать количеству рядов
             const maxX = width;
             const x = normalizedX * maxX;
             const y = (idx + 1) * rowHeight;
             
-            // Позиционируем шарик по центру его размера
             ballEl.style.left = `${boardPadding + x - ballSize / 2}px`;
             ballEl.style.top = `${boardPadding + y - ballSize / 2}px`;
             ballEl.style.transition = `left ${duration}ms cubic-bezier(0.4, 0, 0.2, 1), top ${duration}ms cubic-bezier(0.4, 0, 0.2, 1)`;
@@ -286,18 +297,21 @@
             if (idx === path.length - 1) {
               setTimeout(() => {
                 highlightSlot(bucketIndex);
-                setTimeout(resolve, 300);
+                setTimeout(() => {
+                  ballEl.remove();
+                  resolve();
+                }, 500);
               }, duration);
             }
-          }, idx * duration);
+          }, delay + idx * duration);
         });
       });
     }
 
-    function resetBall() {
-      ballEl.classList.add('hidden');
-      ballEl.style.transform = 'translate(0, 0)';
-      ballEl.style.transition = '';
+    function clearAllBalls() {
+      if (ballsContainer) {
+        ballsContainer.innerHTML = '';
+      }
       highlightedSlot = null;
       Array.from(payoutsEl.children).forEach((slot) => slot.classList.remove('highlight'));
     }

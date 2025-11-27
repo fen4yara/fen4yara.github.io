@@ -173,6 +173,8 @@ p {
 select.input-field {
   cursor: pointer;
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23f5f7ff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
@@ -181,6 +183,17 @@ select.input-field {
 
 select.input-field:focus {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237f5af0' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+}
+
+select.input-field option {
+  background: var(--card-bg);
+  color: var(--text-main);
+  padding: 12px;
+}
+
+/* Стилизация для открытого select */
+select.input-field:not([multiple]):focus {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .input-field:focus {
@@ -711,6 +724,19 @@ button.cashout {
   .plinko-layout {
     grid-template-columns: 320px 1fr;
   }
+  
+  .plinko-controls {
+    order: 1;
+  }
+  
+  .plinko-board-card {
+    order: 2;
+  }
+  
+  .history-card {
+    order: 3;
+    grid-column: 1 / -1;
+  }
 }
 
 .plinko-board-card {
@@ -735,10 +761,15 @@ button.cashout {
 
 .plinko-pegs {
   position: absolute;
-  inset: 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  inset: 20px;
+  pointer-events: none;
+}
+
+#plinkoBallsContainer {
+  position: absolute;
+  inset: 20px;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .plinko-row {
