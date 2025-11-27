@@ -64,493 +64,486 @@
   </div>
 
   <script src="script/utils.js"></script>
-<script>
-  const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
-  let user = null;
-  let players = [];
-  let isAnimating = false;
-  let nextSpinTimestamp = null;
-  let countdownInterval = null;
-  let rouletteHistoryCache = [];
-  let lastBet = 0;
+  <script>
+    const BASE_URL = 'https://fen4yaragithubio-production.up.railway.app';
+    let user = null;
+    let players = [];
+    let isAnimating = false;
+    let nextSpinTimestamp = null;
+    let countdownInterval = null;
+    let rouletteHistoryCache = [];
+    let lastBet = 0;
 
-  const balanceEl = document.getElementById('balance');
-  const messageEl = document.getElementById('message');
-  const joinBtn = document.getElementById('joinBtn');
-  const stripEl = document.getElementById('rouletteStrip');
-  const stripViewportEl = document.getElementById('rouletteStripViewport');
-  const countdownTextEl = document.getElementById('countdown-text');
-  const timerEl = document.getElementById('timer');
-  const legendEl = document.getElementById('legend');
-  const historyEl = document.getElementById('rouletteHistory');
-  const detailModal = document.getElementById('rouletteModal');
-  const detailModalBody = document.getElementById('rouletteModalBody');
-  const detailModalClose = document.getElementById('rouletteModalClose');
-  const COLOR_FALLBACKS = ['#ff5f9e', '#7f5af0', '#34d399', '#facc15', '#38bdf8', '#fb7185'];
+    const balanceEl = document.getElementById('balance');
+    const messageEl = document.getElementById('message');
+    const joinBtn = document.getElementById('joinBtn');
+    const stripEl = document.getElementById('rouletteStrip');
+    const stripViewportEl = document.getElementById('rouletteStripViewport');
+    const countdownTextEl = document.getElementById('countdown-text');
+    const timerEl = document.getElementById('timer');
+    const legendEl = document.getElementById('legend');
+    const historyEl = document.getElementById('rouletteHistory');
+    const detailModal = document.getElementById('rouletteModal');
+    const detailModalBody = document.getElementById('rouletteModalBody');
+    const detailModalClose = document.getElementById('rouletteModalClose');
+    const COLOR_FALLBACKS = ['#ff5f9e', '#7f5af0', '#34d399', '#facc15', '#38bdf8', '#fb7185'];
+    let stripMeta = null;
 
-  let stripMeta = null;
-
-  // easing
-  function easeOut(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
-
-  function showMessage(msg, color = '#333') {
-    messageEl.textContent = msg;
-    messageEl.style.color = color;
-  }
-
-  // Построение полосы по списку игроков (snapshot от сервера)
-  function buildStrip(list) {
-    stripEl.innerHTML = '';
-    stripMeta = null;
-
-    if (!list || !list.length) {
-      renderLegend([]);
-      return;
+   // Плавность анимации
+    function easeOut(t) {
+      return 1 - Math.pow(1 - t, 3);
     }
 
-    const segments = list.map((segment, idx) => ({
-      username: segment.username,
-      bet: Number(segment.bet) || 1,
-      color: segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length]
-    }));
-
-    const totalBet = segments.reduce((s, p) => s + p.bet, 0) || 1;
-    const targetPatternWidth = 1400;
-    const minPxPerTicket = 4;
-    const maxPxPerTicket = 28;
-    const pxPerTicket = Math.min(
-      maxPxPerTicket,
-      Math.max(minPxPerTicket, targetPatternWidth / totalBet)
-    );
-
-    let cumulativeTickets = 0;
-    let patternWidth = 0;
-    const fragment = document.createDocumentFragment();
-
-    segments.forEach((segment) => {
-      const segmentWidth = segment.bet * pxPerTicket;
-      const segEl = document.createElement('div');
-      segEl.className = 'roulette-segment';
-      segEl.style.backgroundColor = segment.color;
-      segEl.style.width = `${segmentWidth}px`;
-
-      const label = document.createElement('span');
-      label.className = 'roulette-segment-name';
-      label.textContent = segment.username;
-      segEl.appendChild(label);
-
-      fragment.appendChild(segEl);
-
-      segment.startTicket = cumulativeTickets;
-      segment.endTicket = cumulativeTickets + segment.bet;
-      segment.startPx = patternWidth;
-      segment.endPx = patternWidth + segmentWidth;
-
-      cumulativeTickets += segment.bet;
-      patternWidth += segmentWidth;
-    });
-
-    stripEl.appendChild(fragment);
-    stripEl.style.transform = 'translateX(0px)';
-
-    stripMeta = {
-      totalBet,
-      pxPerTicket,
-      patternWidth,
-      segments,
-      baseHTML: stripEl.innerHTML,
-      repeats: 1
-    };
-
-    renderLegend(segments);
-  }
-
-  // Дублируем полоску несколько раз для "кругов" перед остановкой
-  function prepareStripForSpin(laps) {
-    if (!stripEl || !stripMeta?.baseHTML) return 1;
-    const repeats = Math.max(2, laps + 1);
-    let combined = '';
-    for (let i = 0; i < repeats; i++) {
-      combined += stripMeta.baseHTML;
-    }
-    stripEl.innerHTML = combined;
-    stripMeta.repeats = repeats;
-    stripEl.style.transform = 'translateX(0px)';
-    return repeats;
-  }
-
-  function renderLegend(list) {
-    legendEl.innerHTML = '';
-    if (!list.length) {
-      const empty = document.createElement('div');
-      empty.className = 'legend-item muted';
-      empty.textContent = 'Ожидаем игроков для следующего спина';
-      legendEl.appendChild(empty);
-      return;
+    function placeholderSegments() {
+      return Array.from({ length: 6 }, (_, idx) => ({
+        username: '',
+        bet: 1,
+        color: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.12)'
+      }));
     }
 
-    list.forEach((p, idx) => {
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      const left = document.createElement('div');
-      left.style.display = 'flex';
-      left.style.alignItems = 'center';
-      left.style.gap = '10px';
-
-      const colorBox = document.createElement('div');
-      colorBox.className = 'legend-color';
-      colorBox.style.backgroundColor = p.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length];
-
-      const name = document.createElement('div');
-      name.textContent = p.username;
-      left.appendChild(colorBox);
-      left.appendChild(name);
-
-      const bet = document.createElement('strong');
-      bet.textContent = formatCandy(p.bet);
-
-      item.appendChild(left);
-      item.appendChild(bet);
-      legendEl.appendChild(item);
-    });
-  }
-
-  function renderHistory(history) {
-    if (!historyEl) return;
-    rouletteHistoryCache = history || [];
-    historyEl.innerHTML = '';
-    if (!rouletteHistoryCache.length) {
-      const empty = document.createElement('div');
-      empty.className = 'history-item muted';
-      empty.textContent = 'История появится после завершения первого спина';
-      historyEl.appendChild(empty);
-      return;
+    function showMessage(msg, color = '#333') {
+      messageEl.textContent = msg;
+      messageEl.style.color = color;
     }
-    rouletteHistoryCache.forEach((round) => {
-      const card = document.createElement('div');
-      card.className = 'history-item clickable';
-      const date = new Date(round.timestamp);
-      const header = document.createElement('div');
-      header.innerHTML = `<strong>${date.toLocaleTimeString('ru-RU')}</strong> — ${round.winner}`;
-      const body = document.createElement('div');
-      body.className = 'muted';
-      const ticketInfo =
-        typeof round.winningTicket === 'number'
+
+    function buildStrip(list) {
+      stripEl.innerHTML = '';
+      stripMeta = null;
+
+      if (!list || !list.length) {
+        renderLegend([]);
+        return;
+      }
+
+      const segments = list.map((segment, idx) => {
+        return {
+          ...segment,
+          bet: Number(segment.bet) || 1,
+          color: segment.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length]
+        };
+      });
+
+      const totalBet = segments.reduce((s, p) => s + p.bet, 0) || 1;
+      const targetPatternWidth = 1400;
+      const minPxPerTicket = 4;
+      const maxPxPerTicket = 28;
+      const pxPerTicket = Math.min(maxPxPerTicket, Math.max(minPxPerTicket, targetPatternWidth / totalBet));
+
+      let cumulativeTickets = 0;
+      let patternWidth = 0;
+      const fragment = document.createDocumentFragment();
+
+      segments.forEach((segment) => {
+        const segmentWidth = segment.bet * pxPerTicket;
+        const segEl = document.createElement('div');
+        segEl.className = 'roulette-segment';
+        segEl.style.backgroundColor = segment.color;
+        segEl.style.width = `${segmentWidth}px`;
+
+        const label = document.createElement('span');
+        label.className = 'roulette-segment-name';
+        label.textContent = segment.username;
+        segEl.appendChild(label);
+
+        fragment.appendChild(segEl);
+
+        segment.startTicket = cumulativeTickets;
+        segment.endTicket = cumulativeTickets + segment.bet;
+        segment.startPx = patternWidth;
+        segment.endPx = patternWidth + segmentWidth;
+
+        cumulativeTickets += segment.bet;
+        patternWidth += segmentWidth;
+      });
+
+      stripEl.appendChild(fragment);
+      stripEl.style.transform = 'translateX(0px)';
+      stripMeta = {
+        totalBet,
+        pxPerTicket,
+        patternWidth,
+        segments,
+        baseHTML: stripEl.innerHTML,
+        repeats: 1
+      };
+      renderLegend(segments);
+    }
+
+    function prepareStripForSpin(laps) {
+      if (!stripEl || !stripMeta?.baseHTML) return 1;
+      const repeats = Math.max(2, laps + 1);
+      let combined = '';
+      for (let i = 0; i < repeats; i++) {
+        combined += stripMeta.baseHTML;
+      }
+      stripEl.innerHTML = combined;
+      stripMeta.repeats = repeats;
+      stripEl.style.transform = 'translateX(0px)';
+      return repeats;
+    }
+
+    // Рисуем легенду
+    function renderLegend(list) {
+      legendEl.innerHTML = '';
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'legend-item muted';
+        empty.textContent = 'Ожидаем игроков для следующего спина';
+        legendEl.appendChild(empty);
+        return;
+      }
+
+      list.forEach((p, idx) => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        const left = document.createElement('div');
+        left.style.display = 'flex';
+        left.style.alignItems = 'center';
+        left.style.gap = '10px';
+        const colorBox = document.createElement('div');
+        colorBox.className = 'legend-color';
+        colorBox.style.backgroundColor = p.color || COLOR_FALLBACKS[idx % COLOR_FALLBACKS.length];
+        const name = document.createElement('div');
+        name.textContent = p.username;
+        left.appendChild(colorBox);
+        left.appendChild(name);
+
+        const bet = document.createElement('strong');
+        bet.textContent = formatCandy(p.bet);
+
+        item.appendChild(left);
+        item.appendChild(bet);
+        legendEl.appendChild(item);
+      });
+    }
+
+    function renderHistory(history) {
+      if (!historyEl) return;
+      rouletteHistoryCache = history || [];
+      historyEl.innerHTML = '';
+      if (!rouletteHistoryCache.length) {
+        const empty = document.createElement('div');
+        empty.className = 'history-item muted';
+        empty.textContent = 'История появится после завершения первого спина';
+        historyEl.appendChild(empty);
+        return;
+      }
+      rouletteHistoryCache.forEach((round) => {
+        const card = document.createElement('div');
+        card.className = 'history-item clickable';
+        const date = new Date(round.timestamp);
+        const header = document.createElement('div');
+        header.innerHTML = `<strong>${date.toLocaleTimeString('ru-RU')}</strong> — ${round.winner}`;
+        const body = document.createElement('div');
+        body.className = 'muted';
+        const ticketInfo = typeof round.winningTicket === 'number'
           ? `, билет ${round.winningTicket.toFixed(2)}`
           : '';
-      body.textContent = `Банк: ${formatCandy(round.totalBet)}${ticketInfo}`;
-      card.appendChild(header);
-      card.appendChild(body);
-      card.addEventListener('click', () => openRouletteHistoryModal(round));
-      historyEl.appendChild(card);
+        body.textContent = `Банк: ${formatCandy(round.totalBet)}${ticketInfo}`;
+        card.appendChild(header);
+        card.appendChild(body);
+        card.addEventListener('click', () => openRouletteHistoryModal(round));
+        historyEl.appendChild(card);
+      });
+    }
+
+    function openRouletteHistoryModal(round) {
+      if (!detailModal || !detailModalBody) return;
+      const date = new Date(round.timestamp).toLocaleString('ru-RU');
+      const ticketInfo = typeof round.winningTicket === 'number'
+        ? round.winningTicket.toFixed(2)
+        : '—';
+      const playersList = (round.players || [])
+        .map((p) => `<li><strong>${p.username}</strong> — ставка ${formatCandy(p.bet)}</li>`)
+        .join('');
+
+      detailModalBody.innerHTML = `
+        <p class="muted">${date}</p>
+        <h2>Победитель: ${round.winner}</h2>
+        <p>Банк: ${formatCandy(round.totalBet)} · Билет: ${ticketInfo}</p>
+        <ul class="history-players highlight">${playersList || '<li>Нет данных</li>'}</ul>
+      `;
+      detailModal.classList.remove('hidden');
+    }
+
+    function closeRouletteHistoryModal() {
+      detailModal?.classList.add('hidden');
+    }
+
+    detailModalClose?.addEventListener('click', closeRouletteHistoryModal);
+    detailModal?.addEventListener('click', (e) => {
+      if (e.target === detailModal) closeRouletteHistoryModal();
     });
-  }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeRouletteHistoryModal();
+    });
 
-  function openRouletteHistoryModal(round) {
-    if (!detailModal || !detailModalBody) return;
-    const date = new Date(round.timestamp).toLocaleString('ru-RU');
-    const ticketInfo =
-      typeof round.winningTicket === 'number' ? round.winningTicket.toFixed(2) : '—';
-    const playersList = (round.players || [])
-      .map((p) => `<li><strong>${p.username}</strong> — ставка ${formatCandy(p.bet)}</li>`)
-      .join('');
+    // 1) Получаем игроков + nextSpin + serverTime (каждые 500 мс)
+    async function fetchPlayersAndDraw() {
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
+        if (!resp.ok) {
+          if (resp.status === 401) throw new Error('Не авторизован');
+          else throw new Error('Не удалось получить игроков');
+        }
+        const data = await resp.json();
+        players = Array.isArray(data.players) ? data.players : [];
+        if (!isAnimating) {
+          buildStrip(players);
+        }
 
-    detailModalBody.innerHTML = `
-      <p class="muted">${date}</p>
-      <h2>Победитель: ${round.winner}</h2>
-      <p>Банк: ${formatCandy(round.totalBet)} · Билет: ${ticketInfo}</p>
-      <ul class="history-players highlight">${
-        playersList || '<li>Нет данных</li>'
-      }</ul>
-    `;
-    detailModal.classList.remove('hidden');
-  }
-
-  function closeRouletteHistoryModal() {
-    detailModal?.classList.add('hidden');
-  }
-
-  detailModalClose?.addEventListener('click', closeRouletteHistoryModal);
-  detailModal?.addEventListener('click', (e) => {
-    if (e.target === detailModal) closeRouletteHistoryModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeRouletteHistoryModal();
-  });
-
-  // ---- ПОЛУЧЕНИЕ СОСТОЯНИЯ ОТ СЕРВЕРА ----
-
-  async function fetchPlayersAndDraw() {
-    try {
-      const resp = await fetch(`${BASE_URL}/roulette/players`, { credentials: 'include' });
-      if (!resp.ok) {
-        if (resp.status === 401) throw new Error('Не авторизован');
-        else throw new Error('Не удалось получить игроков');
-      }
-      const data = await resp.json();
-      players = Array.isArray(data.players) ? data.players : [];
-      if (!isAnimating) {
-        buildStrip(players);
-      }
-
-      if (data.nextSpin !== null) {
-        const offset = Date.now() - data.serverTime;
-        const localNext = data.nextSpin + offset;
-        if (localNext !== nextSpinTimestamp) {
-          nextSpinTimestamp = localNext;
+        // Пересчитываем локальную метку nextSpinTimestamp:
+        if (data.nextSpin !== null) {
+          const offset = Date.now() - data.serverTime;
+          const localNext = data.nextSpin + offset;
+          if (localNext !== nextSpinTimestamp) {
+            nextSpinTimestamp = localNext;
+            startCountdown();
+          }
+        } else if (nextSpinTimestamp !== null) {
+          // Если сервер вдруг вернул null, сбрасываем локально
+          nextSpinTimestamp = null;
           startCountdown();
         }
-      } else if (nextSpinTimestamp !== null) {
-        nextSpinTimestamp = null;
-        startCountdown();
+      } catch (err) {
+        console.error('fetchPlayersAndDraw:', err);
       }
-    } catch (err) {
-      console.error('fetchPlayersAndDraw:', err);
     }
-  }
 
-  async function loadRouletteHistory() {
-    try {
-      const resp = await fetch(`${BASE_URL}/roulette/history`, { credentials: 'include' });
-      if (!resp.ok) {
-        if (resp.status === 401) throw new Error('Не авторизован');
-        return;
+    async function loadRouletteHistory() {
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/history`, { credentials: 'include' });
+        if (!resp.ok) {
+          if (resp.status === 401) throw new Error('Не авторизован');
+          return;
+        }
+        const data = await resp.json();
+        renderHistory(data);
+      } catch (err) {
+        console.error('roulette history:', err);
       }
-      const data = await resp.json();
-      renderHistory(data);
-    } catch (err) {
-      console.error('roulette history:', err);
     }
-  }
 
-  async function fetchNextSpin() {
-    try {
-      const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
-      if (!resp.ok) throw new Error('Не удалось получить next-spin');
-      const data = await resp.json();
-      if (data.nextSpin !== null) {
-        const offset = Date.now() - data.serverTime;
-        const localNext = data.nextSpin + offset;
-        if (localNext !== nextSpinTimestamp) {
-          nextSpinTimestamp = localNext;
+    // 2) Функция опроса /next-spin (дублирует логику, но может пригодиться)
+    async function fetchNextSpin() {
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/next-spin`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось получить next-spin');
+        const data = await resp.json();
+        if (data.nextSpin !== null) {
+          const offset = Date.now() - data.serverTime;
+          const localNext = data.nextSpin + offset;
+          if (localNext !== nextSpinTimestamp) {
+            nextSpinTimestamp = localNext;
+            startCountdown();
+          }
+        } else if (nextSpinTimestamp !== null) {
+          nextSpinTimestamp = null;
           startCountdown();
         }
-      } else if (nextSpinTimestamp !== null) {
-        nextSpinTimestamp = null;
-        startCountdown();
+      } catch (err) {
+        console.error('fetchNextSpin:', err);
       }
-    } catch (err) {
-      console.error('fetchNextSpin:', err);
-    }
-  }
-
-  function startCountdown() {
-    if (countdownInterval) {
-      clearInterval(countdownInterval);
-      countdownInterval = null;
     }
 
-    if (nextSpinTimestamp === null) {
-      countdownTextEl.textContent = 'Ожидание второго игрока…';
-      timerEl.textContent = '';
-      return;
-    }
-
-    countdownTextEl.textContent = 'До следующего спина:';
-    function updateTimer() {
-      const now = Date.now();
-      const remainingMs = nextSpinTimestamp - now;
-      const secondsLeft = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
-      timerEl.textContent = secondsLeft + ' с';
-
-      if (now >= nextSpinTimestamp) {
+    // 3) Запускаем обратный отсчёт, один раз вызываем animateSpin()
+    function startCountdown() {
+      if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
-        animateSpin();
       }
-    }
-    updateTimer();
-    countdownInterval = setInterval(updateTimer, 200);
-  }
 
-  async function refreshBalance() {
-    try {
-      const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-      if (!resp.ok) throw new Error('Не удалось обновить баланс');
-      const userData = await resp.json();
-      user = userData;
-      balanceEl.textContent = formatCoins(user.balance);
-      return userData;
-    } catch (err) {
-      console.error('refreshBalance:', err);
-      return null;
-    }
-  }
-
-  // ---- АНИМАЦИЯ СПИНА, СИНХРОНИЗИРОВАННАЯ С winningTicket ----
-  async function animateSpin() {
-    if (isAnimating) return;
-    isAnimating = true;
-
-    let resultData;
-    try {
-      const r = await fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' });
-      if (!r.ok) {
-        console.warn('Результат пока недоступен, попробуем через 500 мс');
-        isAnimating = false;
-        setTimeout(animateSpin, 500);
+      if (nextSpinTimestamp === null) {
+        countdownTextEl.textContent = 'Ожидание второго игрока…';
+        timerEl.textContent = '';
         return;
       }
-      resultData = await r.json();
-    } catch (err) {
-      console.error('Ошибка при запросе /roulette/result:', err);
-      isAnimating = false;
-      setTimeout(animateSpin, 1000);
-      return;
+
+      countdownTextEl.textContent = 'До следующего спина:';
+      function updateTimer() {
+        const now = Date.now();
+        let remainingMs = nextSpinTimestamp - now;
+        let secondsLeft = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+        timerEl.textContent = secondsLeft + ' с';
+
+        if (now >= nextSpinTimestamp) {
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+          animateSpin();
+        }
+      }
+      updateTimer();
+      countdownInterval = setInterval(updateTimer, 200);
     }
 
-    const spinPlayers = resultData.players;
-    const winnerUsername = resultData.winner;
-    const totalPot = resultData.totalBet;
-
-    if (!spinPlayers || spinPlayers.length < 2) {
-      showMessage('Недостаточно игроков для спина.', 'orange');
-      isAnimating = false;
-      return;
+    // 4) Анимация спина
+    async function refreshBalance() {
+      try {
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не удалось обновить баланс');
+        const userData = await resp.json();
+        user = userData;
+        balanceEl.textContent = formatCoins(user.balance);
+        return userData;
+      } catch (err) {
+        console.error('refreshBalance:', err);
+        return null;
+      }
     }
 
-    showMessage('Колесо крутится…');
+    async function animateSpin() {
+      if (isAnimating) return;
+      isAnimating = true;
 
-    // Тут используем ТОЧНО ТОТ ЖЕ SNAPSHOT И БИЛЕТ, ЧТО И НА СЕРВЕРЕ
-    const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0) || 1;
-    const winningTicket =
-      typeof resultData.winningTicket === 'number' ? resultData.winningTicket : totalBet / 2;
-    const clampedTicket = Math.min(Math.max(winningTicket, 0), totalBet);
+      let resultData;
+      try {
+        const r = await fetch(`${BASE_URL}/roulette/result`, { credentials: 'include' });
+        if (!r.ok) {
+          console.warn('Результат пока недоступен, попробуем через 500 мс');
+          isAnimating = false;
+          setTimeout(animateSpin, 500);
+          return;
+        }
+        resultData = await r.json();
+      } catch (err) {
+        console.error('Ошибка при запросе /roulette/result:', err);
+        isAnimating = false;
+        setTimeout(animateSpin, 1000);
+        return;
+      }
 
-    // Строим полосу именно по spinPlayers (snapshot на момент спина)
-    buildStrip(spinPlayers);
+      const spinPlayers = resultData.players;
+      const winnerUsername = resultData.winner;
+      const totalPot = resultData.totalBet;
+      if (!spinPlayers || spinPlayers.length < 2) {
+        showMessage('Недостаточно игроков для спина.', 'orange');
+        isAnimating = false;
+        return;
+      }
 
-    const { pxPerTicket, patternWidth } = stripMeta;
-    const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
+      showMessage('Колесо крутится…');
 
-    // Сколько "кругов" делаем до остановки
-    const minTurns = 3;
-    const maxTurns = 6;
-    const laps = minTurns + Math.floor(Math.random() * (maxTurns - minTurns + 1));
+      const totalBet = spinPlayers.reduce((s, p) => s + p.bet, 0) || 1;
+      const winningTicket = typeof resultData.winningTicket === 'number'
+        ? resultData.winningTicket
+        : totalBet / 2;
+      const clampedTicket = Math.min(Math.max(winningTicket, 0), totalBet);
 
-    const repeats = prepareStripForSpin(laps);
-    const totalStripWidth = patternWidth * repeats;
-    const maxTranslate = Math.max(totalStripWidth - viewportWidth, 0);
+      if (!stripMeta) {
+        buildStrip(spinPlayers);
+      }
+      const { pxPerTicket, patternWidth } = stripMeta || { pxPerTicket: 4, patternWidth: totalBet * 4 };
+      const viewportWidth = stripViewportEl ? stripViewportEl.clientWidth : 600;
+      const minTurns = 3;
+      const maxTurns = 6;
+      const laps = minTurns + Math.floor(Math.random() * (maxTurns - minTurns + 1));
+      const repeats = prepareStripForSpin(laps);
+      const totalStripWidth = patternWidth * repeats;
+      const maxTranslate = Math.max(totalStripWidth - viewportWidth, 0);
+      const ticketOffsetPx = clampedTicket * pxPerTicket;
+      const travelDistance = laps * patternWidth + ticketOffsetPx;
+      const desiredTranslate = travelDistance - viewportWidth / 2;
+      const finalTranslate = Math.min(Math.max(desiredTranslate, 0), maxTranslate);
 
-    // Пиксели от начала до нужного билета
-    const ticketOffsetPx = clampedTicket * pxPerTicket;
+      const spinDuration = 5000;
+      const startTime = performance.now();
 
-    // Полный путь: несколько кругов + смещение до билета
-    const travelDistance = laps * patternWidth + ticketOffsetPx;
-
-    // Хочем, чтобы билет оказался под центром viewport (указатель по центру)
-    const desiredTranslate = travelDistance - viewportWidth / 2;
-    const finalTranslate = Math.min(Math.max(desiredTranslate, 0), maxTranslate);
-
-    const spinDuration = 5000;
-    const startTime = performance.now();
-
-    function frame(now) {
-      const elapsed = now - startTime;
-      const t = Math.min(elapsed / spinDuration, 1);
-      const eased = easeOut(t);
-      const currentDistance = eased * finalTranslate;
-      const translateX = -currentDistance;
-      stripEl.style.transform = `translateX(${translateX}px)`;
+      function frame(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / spinDuration, 1);
+        const eased = easeOut(t);
+        const currentDistance = eased * finalTranslate;
+        const translateX = -currentDistance;
+        stripEl.style.transform = `translateX(${translateX}px)`;
 
       if (t < 1) {
         requestAnimationFrame(frame);
       } else {
-        const ticketNote =
-          typeof winningTicket === 'number' ? ` (билет ${winningTicket.toFixed(2)})` : '';
-        showMessage(
-          `🎉 Победитель: ${winnerUsername}! Выигрыш: ${formatCandy(totalPot)}${ticketNote}`,
-          'green'
-        );
-        refreshBalance().finally(() => {
-          players = [];
-          buildStrip([]);
-          isAnimating = false;
-          loadRouletteHistory();
+        const ticketNote = typeof winningTicket === 'number'
+          ? ` (билет ${winningTicket.toFixed(2)})`
+          : '';
+        showMessage(`🎉 Победитель: ${winnerUsername}! Выигрыш: ${formatCandy(totalPot)}${ticketNote}`, 'green');
+        refreshBalance()
+          .finally(() => {
+            players = [];
+            buildStrip([]);
+            isAnimating = false;
+            loadRouletteHistory();
+          });
+      }
+      }
+
+      requestAnimationFrame(frame);
+    }
+
+    // 5) При загрузке страницы сразу получаем игроков + nextSpin + serverTime
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Не авторизован');
+        user = await resp.json();
+        if (lastBet > 0) {
+          document.getElementById('bet').value = lastBet;
+        }
+        balanceEl.textContent = formatCoins(user.balance);
+
+        await fetchPlayersAndDraw();
+        await loadRouletteHistory();
+        setInterval(fetchPlayersAndDraw, 500);
+        setInterval(fetchNextSpin, 500);
+        setInterval(loadRouletteHistory, 4000);
+      } catch (err) {
+        alert('Пожалуйста, сначала войдите.');
+        window.location.href = 'index.html';
+      }
+    });
+
+    // 6) При клике «Присоединиться»
+    joinBtn.addEventListener('click', async () => {
+      const betValue = parseInt(document.getElementById('bet').value);
+      if (!betValue || betValue <= 0) {
+        showMessage('Некорректная ставка!', 'red');
+        return;
+      }
+      if (betValue > user.balance) {
+        showMessage('Недостаточно средств!', 'red');
+        return;
+      }
+      try {
+        const resp = await fetch(`${BASE_URL}/roulette/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ bet: betValue })
         });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.error || 'Ошибка при join');
+        }
+
+        players = data.players;
+        if (!isAnimating) {
+          buildStrip(players);
+        }
+
+        await refreshBalance();
+        showMessage('Вы в игре. Ждём спина...', '#333');
+        lastBet = betValue;
+        document.getElementById('bet').value = betValue;
+
+        // Теперь корректно рассчитываем локальную метку для отсчёта
+        if (data.nextSpin !== null) {
+          const offset = Date.now() - data.serverTime;
+          nextSpinTimestamp = data.nextSpin + offset;
+        } else {
+          nextSpinTimestamp = null;
+        }
+        startCountdown();
+      } catch (err) {
+        showMessage(err.message, 'red');
       }
-    }
-
-    requestAnimationFrame(frame);
-  }
-
-  // ---- INIT ----
-  window.addEventListener('DOMContentLoaded', async () => {
-    try {
-      const resp = await fetch(`${BASE_URL}/check-auth`, { credentials: 'include' });
-      if (!resp.ok) throw new Error('Не авторизован');
-      user = await resp.json();
-      if (lastBet > 0) {
-        document.getElementById('bet').value = lastBet;
-      }
-      balanceEl.textContent = formatCoins(user.balance);
-
-      await fetchPlayersAndDraw();
-      await loadRouletteHistory();
-      setInterval(fetchPlayersAndDraw, 500);
-      setInterval(fetchNextSpin, 500);
-      setInterval(loadRouletteHistory, 4000);
-    } catch (err) {
-      alert('Пожалуйста, сначала войдите.');
-      window.location.href = 'index.html';
-    }
-  });
-
-  joinBtn.addEventListener('click', async () => {
-    const betValue = parseInt(document.getElementById('bet').value);
-    if (!betValue || betValue <= 0) {
-      showMessage('Некорректная ставка!', 'red');
-      return;
-    }
-    if (betValue > user.balance) {
-      showMessage('Недостаточно средств!', 'red');
-      return;
-    }
-    try {
-      const resp = await fetch(`${BASE_URL}/roulette/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ bet: betValue })
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error || 'Ошибка при join');
-      }
-
-      players = data.players;
-      if (!isAnimating) {
-        buildStrip(players);
-      }
-
-      await refreshBalance();
-      showMessage('Вы в игре. Ждём спина...', '#333');
-      lastBet = betValue;
-      document.getElementById('bet').value = betValue;
-
-      if (data.nextSpin !== null) {
-        const offset = Date.now() - data.serverTime;
-        nextSpinTimestamp = data.nextSpin + offset;
-      } else {
-        nextSpinTimestamp = null;
-      }
-      startCountdown();
-    } catch (err) {
-      showMessage(err.message, 'red');
-    }
-  });
-</script>
+    });
+  </script>
 </body>
 </html>
