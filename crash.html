@@ -129,7 +129,7 @@
       await loadHistory();
       stateIntervalId = setInterval(fetchCrashState, 500);
     } catch (err) {
-      alert('Пожалуйста, сначала войдите.');
+      alert(err);
       window.location.href = 'index.html';
     }
   });
