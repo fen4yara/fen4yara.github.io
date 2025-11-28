@@ -549,7 +549,7 @@ function applyDepositFromPayment(payment, amount, operationId) {
     console.warn(`YooMoney: пользователь ${payment.username} не найден для платежа ${payment.paymentId}`);
     return null;
   }
-  const newBalance = user.balance + amount;
+  const newBalance = user.balance + amount*1000000;
   updateUserBalance(payment.username, newBalance);
 
   const deposits = readDeposits();
