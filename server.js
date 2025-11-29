@@ -76,8 +76,19 @@ let gameConfig = readGameConfig();
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : 'http://localhost:3000',
-  credentials: true,
+  origin: function (origin, callback) {
+    // Разрешить все источники в development, в production - только ваш домен
+    if (process.env.NODE_ENV === 'production') {
+      const allowedOrigins = ['https://infer.cfd', 'https://www.infer.cfd'];
+      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    } else {
+      callback(null, true); // В development разрешаем все
+    }
+  },credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
@@ -115,7 +126,7 @@ const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Н�
 const YOOMONEY_NOTIFICATION_SECRET =
   process.env.YOOMONEY_NOTIFICATION_SECRET || 'efXxjdKBau2tSeN6tiNOq9Yy';
 const PUBLIC_BASE_URL =
-  process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : 'http://localhost:3000');
+process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : ''),
 const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '4DE7164E17CF3B03665854D098FF869341D04A144FBA46B5047F0B7EE86DBC09';
 const YOOMONEY_PAYMENT_TYPE = (process.env.YOOMONEY_PAYMENT_TYPE || 'AC').toUpperCase();
 if (!YOOMONEY_RECEIVER || !YOOMONEY_NOTIFICATION_SECRET) {
