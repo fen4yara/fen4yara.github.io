@@ -126,7 +126,7 @@ const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // –ù–
 const YOOMONEY_NOTIFICATION_SECRET =
   process.env.YOOMONEY_NOTIFICATION_SECRET || 'efXxjdKBau2tSeN6tiNOq9Yy';
 const PUBLIC_BASE_URL =
-process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : ''),
+process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : '');
 const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '4DE7164E17CF3B03665854D098FF869341D04A144FBA46B5047F0B7EE86DBC09';
 const YOOMONEY_PAYMENT_TYPE = (process.env.YOOMONEY_PAYMENT_TYPE || 'AC').toUpperCase();
 if (!YOOMONEY_RECEIVER || !YOOMONEY_NOTIFICATION_SECRET) {
