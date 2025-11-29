@@ -77,20 +77,25 @@ let gameConfig = readGameConfig();
 // --------------- CORS ---------------
 const corsOptions = {
   origin: function (origin, callback) {
-    // Разрешить все источники в development, в production - только ваш домен
+    // Разрешаем запросы без origin (например, из мобильных приложений)
+    if (!origin) return callback(null, true);
+    
     if (process.env.NODE_ENV === 'production') {
       const allowedOrigins = ['https://infer.cfd', 'https://www.infer.cfd'];
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
+        console.log('CORS blocked for origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     } else {
-      callback(null, true); // В development разрешаем все
+      // В development разрешаем все источники
+      callback(null, true);
     }
-  },credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Set-Cookie']
 };
 
 app.use(cors(corsOptions));
@@ -100,7 +105,11 @@ app.use(
     secret: 'mySecretKey',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }
+    cookie: { 
+      secure: process.env.NODE_ENV === 'production', // true только в production
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000 // 24 часа
+    }
   })
 );
 // Запрещаем прямой доступ к JSON файлам
@@ -125,9 +134,9 @@ const withdrawalsFile = path.join(__dirname, 'data', 'withdrawals.json');
 const YOOMONEY_RECEIVER = process.env.YOOMONEY_RECEIVER || '79375809887'; // Номер кошелька получателя
 const YOOMONEY_NOTIFICATION_SECRET =
   process.env.YOOMONEY_NOTIFICATION_SECRET || 'efXxjdKBau2tSeN6tiNOq9Yy';
-const PUBLIC_BASE_URL =
-process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : '');
-const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '4DE7164E17CF3B03665854D098FF869341D04A144FBA46B5047F0B7EE86DBC09';
+  const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 
+  (process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : 'http://localhost:' + PORT);
+  const YOOMONEY_ACCESS_TOKEN = process.env.YOOMONEY_ACCESS_TOKEN || '4DE7164E17CF3B03665854D098FF869341D04A144FBA46B5047F0B7EE86DBC09';
 const YOOMONEY_PAYMENT_TYPE = (process.env.YOOMONEY_PAYMENT_TYPE || 'AC').toUpperCase();
 if (!YOOMONEY_RECEIVER || !YOOMONEY_NOTIFICATION_SECRET) {
   console.warn('⚠️ YooMoney env vars are missing. Check receiver and notification secret.');
