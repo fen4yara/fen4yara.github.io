@@ -76,23 +76,7 @@ let gameConfig = readGameConfig();
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Разрешаем запросы без origin (например, из мобильных приложений)
-    if (!origin) return callback(null, true);
-    
-    if (process.env.NODE_ENV === 'production') {
-      const allowedOrigins = ['https://infer.cfd', 'https://www.infer.cfd'];
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        console.log('CORS blocked for origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
-    } else {
-      // В development разрешаем все источники
-      callback(null, true);
-    }
-  },
+  origin: process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Set-Cookie']
