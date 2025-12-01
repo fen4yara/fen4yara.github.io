@@ -76,7 +76,7 @@ let gameConfig = readGameConfig();
 
 // --------------- CORS ---------------
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' ? 'https://infer.cfd',
+  origin: process.env.NODE_ENV === 'production' ? 'https://infer.cfd' : 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Set-Cookie']
