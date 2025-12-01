@@ -149,7 +149,7 @@
   {
     "username": "Алом",
     "passwordHash": "48c86b4d5fb161db63b2956e01d6e2a6c757d80d7bec3864743d30af61edb5bf",
-    "balance": 105565.62,
+    "balance": 115565.62,
     "ip": "176.15.223.173",
     "banned": false
   },
@@ -170,7 +170,7 @@
   {
     "username": "Жмот",
     "passwordHash": "59dddde5322066d2514328a0f271b4551a05f8416f8773f5f234c7318d2e66fe",
-    "balance": 21137.25,
+    "balance": 10615.95,
     "ip": "91.244.254.43",
     "banned": false
   }

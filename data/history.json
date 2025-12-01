@@ -78,46 +78,6 @@
   ],
   "rouletteHistory": [
     {
-      "winner": "Жмот",
-      "totalBet": 14500,
-      "payout": 14065,
-      "commission": 435,
-      "timestamp": 1764576915228,
-      "players": [
-        {
-          "username": "Алом",
-          "bet": 5000,
-          "color": "#31DE88"
-        },
-        {
-          "username": "Жмот",
-          "bet": 9500,
-          "color": "#660BBE"
-        }
-      ],
-      "winningTicket": 10055.878422233302
-    },
-    {
-      "winner": "Жмот",
-      "totalBet": 10000,
-      "payout": 9700,
-      "commission": 300,
-      "timestamp": 1764576869868,
-      "players": [
-        {
-          "username": "Алом",
-          "bet": 5000,
-          "color": "#1076E1"
-        },
-        {
-          "username": "Жмот",
-          "bet": 5000,
-          "color": "#6BAF50"
-        }
-      ],
-      "winningTicket": 7436.431752629233
-    },
-    {
       "winner": "Алом",
       "totalBet": 246,
       "payout": 238,
