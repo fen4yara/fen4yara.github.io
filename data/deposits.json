@@ -1,2 +1,17 @@
-[]
-
+[
+  {
+    "username": "Abcdabcd",
+    "amount": 1000,
+    "timestamp": 1764512766514
+  },
+  {
+    "username": "Алом",
+    "amount": 1000,
+    "timestamp": 1764575783287
+  },
+  {
+    "username": "arkaha",
+    "amount": 1000,
+    "timestamp": 1764575784225
+  }
+]

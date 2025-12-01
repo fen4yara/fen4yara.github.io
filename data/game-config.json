@@ -1,0 +1,6 @@
+{
+  "coinflipMultiplier": 1.95,
+  "diceCommissionPercent": 2,
+  "rouletteCommissionPercent": 3,
+  "crashCommissionPercent": 2
+}
