@@ -1,114 +1,102 @@
 {
   "crashHistory": [
     {
-      "timestamp": 1764075311168,
-      "crashPoint": 1.4,
-      "totalBet": 50000,
+      "timestamp": 1764576288517,
+      "crashPoint": 1.9,
+      "totalBet": 1000000,
       "players": [
         {
-          "username": "yp",
-          "bet": 50000,
-          "cashedOut": false,
-          "cashoutCoef": null,
-          "winnings": 0,
-          "color": "#062477"
+          "username": "arkaha",
+          "bet": 1000000,
+          "cashedOut": true,
+          "cashoutCoef": 1.56,
+          "winnings": 1528800,
+          "color": "#257551"
         }
       ]
     },
     {
-      "timestamp": 1764075287017,
-      "crashPoint": 1.99,
-      "totalBet": 58421,
+      "timestamp": 1764576272991,
+      "crashPoint": 1.21,
+      "totalBet": 1000000,
       "players": [
         {
-          "username": "kykykyky",
-          "bet": 22662,
+          "username": "arkaha",
+          "bet": 1000000,
           "cashedOut": false,
           "cashoutCoef": null,
           "winnings": 0,
-          "color": "#EE5CFF"
-        },
-        {
-          "username": "yp",
-          "bet": 35759,
-          "cashedOut": true,
-          "cashoutCoef": 1.59,
-          "winnings": 56856,
-          "color": "#0BCFED"
+          "color": "#07B751"
         }
       ]
     },
     {
-      "timestamp": 1764075265552,
-      "crashPoint": 1.43,
-      "totalBet": 120000,
+      "timestamp": 1764575723759,
+      "crashPoint": 1.01,
+      "totalBet": 123,
       "players": [
         {
-          "username": "yp",
-          "bet": 50000,
+          "username": "12",
+          "bet": 123,
           "cashedOut": false,
           "cashoutCoef": null,
           "winnings": 0,
-          "color": "#AA9C67"
-        },
-        {
-          "username": "kykykyky",
-          "bet": 70000,
-          "cashedOut": false,
-          "cashoutCoef": null,
-          "winnings": 0,
-          "color": "#5FEF6F"
+          "color": "#4EDA52"
         }
       ]
     },
     {
-      "timestamp": 1764075241691,
-      "crashPoint": 3.19,
-      "totalBet": 2218,
+      "timestamp": 1764432053049,
+      "crashPoint": 1.37,
+      "totalBet": 8,
       "players": [
         {
-          "username": "yp",
-          "bet": 500,
-          "cashedOut": true,
-          "cashoutCoef": 2.04,
-          "winnings": 1020,
-          "color": "#025320"
-        },
-        {
-          "username": "kykykyky",
-          "bet": 1718,
-          "cashedOut": true,
-          "cashoutCoef": 1.55,
-          "winnings": 2662,
-          "color": "#F0DF1A"
+          "username": "1",
+          "bet": 8,
+          "cashedOut": false,
+          "cashoutCoef": null,
+          "winnings": 0,
+          "color": "#0752E5"
         }
       ]
     },
     {
-      "timestamp": 1764075219109,
-      "crashPoint": 3.75,
-      "totalBet": 51236,
+      "timestamp": 1764432036394,
+      "crashPoint": 1.91,
+      "totalBet": 8.258599849875877e+22,
       "players": [
         {
-          "username": "kykykyky",
-          "bet": 1236,
+          "username": "1",
+          "bet": 8.258599849875877e+22,
           "cashedOut": true,
-          "cashoutCoef": 1.39,
-          "winnings": 1718,
-          "color": "#BD587E"
-        },
-        {
-          "username": "yp",
-          "bet": 50000,
-          "cashedOut": true,
-          "cashoutCoef": 1.54,
-          "winnings": 77000,
-          "color": "#F2DEE2"
+          "cashoutCoef": 1.09,
+          "winnings": 8.821836359637413e+22,
+          "color": "#C7BF6F"
         }
       ]
     }
   ],
   "rouletteHistory": [
+    {
+      "winner": "Алом",
+      "totalBet": 246,
+      "payout": 238,
+      "commission": 7.38,
+      "timestamp": 1764575955986,
+      "players": [
+        {
+          "username": "12",
+          "bet": 123,
+          "color": "#5B9E4C"
+        },
+        {
+          "username": "Алом",
+          "bet": 123,
+          "color": "#3A353E"
+        }
+      ],
+      "winningTicket": 243.66346133109096
+    },
     {
       "winner": "yp",
       "totalBet": 80000,
@@ -192,7 +180,1084 @@
       "winningTicket": 209.01023839884303
     }
   ],
-  "coinflipHistory": [],
-  "diceHistory": [],
-  "plinkoHistory": []
+  "coinflipHistory": [
+    {
+      "username": "Жмот",
+      "bet": 150,
+      "choice": "tails",
+      "result": "heads",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764576638120
+    },
+    {
+      "username": "Жмот",
+      "bet": 200,
+      "choice": "tails",
+      "result": "tails",
+      "win": true,
+      "payout": 390,
+      "timestamp": 1764576631262
+    },
+    {
+      "username": "Жмот",
+      "bet": 300,
+      "choice": "heads",
+      "result": "tails",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764576625190
+    },
+    {
+      "username": "Жмот",
+      "bet": 123,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 239.85,
+      "timestamp": 1764576620230
+    },
+    {
+      "username": "Жмот",
+      "bet": 234,
+      "choice": "tails",
+      "result": "heads",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764576612429
+    },
+    {
+      "username": "Жмот",
+      "bet": 500,
+      "choice": "tails",
+      "result": "heads",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764576604400
+    },
+    {
+      "username": "Жмот",
+      "bet": 314,
+      "choice": "tails",
+      "result": "tails",
+      "win": true,
+      "payout": 612.3,
+      "timestamp": 1764576592188
+    },
+    {
+      "username": "Жмот",
+      "bet": 305,
+      "choice": "tails",
+      "result": "heads",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764576579160
+    },
+    {
+      "username": "Жмот",
+      "bet": 200,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 390,
+      "timestamp": 1764576571715
+    },
+    {
+      "username": "Жмот",
+      "bet": 240,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 468,
+      "timestamp": 1764576561016
+    },
+    {
+      "username": "Жмот",
+      "bet": 94,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 183.3,
+      "timestamp": 1764576554045
+    },
+    {
+      "username": "Жмот",
+      "bet": 120,
+      "choice": "tails",
+      "result": "tails",
+      "win": true,
+      "payout": 234,
+      "timestamp": 1764576543325
+    },
+    {
+      "username": "detestation",
+      "bet": 1000,
+      "choice": "heads",
+      "result": "tails",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764575775738
+    },
+    {
+      "username": "1",
+      "bet": 1271.27,
+      "choice": "heads",
+      "result": "tails",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764430102629
+    },
+    {
+      "username": "1",
+      "bet": 330.2,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 643.89,
+      "timestamp": 1764430093531
+    },
+    {
+      "username": "1",
+      "bet": 330.2,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 643.89,
+      "timestamp": 1764430092690
+    },
+    {
+      "username": "1",
+      "bet": 330.2,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 643.89,
+      "timestamp": 1764430091494
+    },
+    {
+      "username": "1",
+      "bet": 61524,
+      "choice": "heads",
+      "result": "tails",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764430083182
+    },
+    {
+      "username": "1",
+      "bet": 145272,
+      "choice": "tails",
+      "result": "heads",
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764422766477
+    },
+    {
+      "username": "1",
+      "bet": 50,
+      "choice": "heads",
+      "result": "heads",
+      "win": true,
+      "payout": 97.5,
+      "timestamp": 1764422758037
+    }
+  ],
+  "diceHistory": [
+    {
+      "username": "1",
+      "bet": 8.821836359637413e+22,
+      "percent": 33,
+      "side": "more",
+      "roll": 518957,
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764432059758
+    },
+    {
+      "username": "1",
+      "bet": 128344711.41,
+      "percent": 96,
+      "side": "more",
+      "roll": 127491,
+      "win": true,
+      "payout": 131018559.56,
+      "timestamp": 1764430901651
+    },
+    {
+      "username": "1",
+      "bet": 128344711.41,
+      "percent": 96,
+      "side": "more",
+      "roll": 437882,
+      "win": true,
+      "payout": 131018559.56,
+      "timestamp": 1764430901028
+    },
+    {
+      "username": "1",
+      "bet": 128344711.41,
+      "percent": 96,
+      "side": "more",
+      "roll": 665084,
+      "win": true,
+      "payout": 131018559.56,
+      "timestamp": 1764430900847
+    },
+    {
+      "username": "1",
+      "bet": 128344711.41,
+      "percent": 96,
+      "side": "more",
+      "roll": 363817,
+      "win": true,
+      "payout": 131018559.56,
+      "timestamp": 1764430900439
+    },
+    {
+      "username": "1",
+      "bet": 128344711.41,
+      "percent": 96,
+      "side": "more",
+      "roll": 521151,
+      "win": true,
+      "payout": 131018559.56,
+      "timestamp": 1764430899662
+    },
+    {
+      "username": "1",
+      "bet": 129654351.32,
+      "percent": 99,
+      "side": "more",
+      "roll": 509717,
+      "win": true,
+      "payout": 128344711.41,
+      "timestamp": 1764430886683
+    },
+    {
+      "username": "1",
+      "bet": 3144118019.03,
+      "percent": 97,
+      "side": "more",
+      "roll": 19839,
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764430860178
+    },
+    {
+      "username": "1",
+      "bet": 3144118019.03,
+      "percent": 97,
+      "side": "more",
+      "roll": 288511,
+      "win": true,
+      "payout": 3176531606.86,
+      "timestamp": 1764430859810
+    },
+    {
+      "username": "1",
+      "bet": 3144118019.03,
+      "percent": 97,
+      "side": "more",
+      "roll": 484760,
+      "win": true,
+      "payout": 3176531606.86,
+      "timestamp": 1764430859612
+    },
+    {
+      "username": "1",
+      "bet": 3144118019.03,
+      "percent": 97,
+      "side": "more",
+      "roll": 738582,
+      "win": true,
+      "payout": 3176531606.86,
+      "timestamp": 1764430858965
+    },
+    {
+      "username": "1",
+      "bet": 3144118019.03,
+      "percent": 97,
+      "side": "more",
+      "roll": 176996,
+      "win": true,
+      "payout": 3176531606.86,
+      "timestamp": 1764430857616
+    },
+    {
+      "username": "1",
+      "bet": 2245798585.02,
+      "percent": 70,
+      "side": "more",
+      "roll": 844964,
+      "win": true,
+      "payout": 3144118019.03,
+      "timestamp": 1764430845525
+    },
+    {
+      "username": "1",
+      "bet": 1604141846.44,
+      "percent": 70,
+      "side": "less",
+      "roll": 35221,
+      "win": true,
+      "payout": 2245798585.02,
+      "timestamp": 1764430836794
+    },
+    {
+      "username": "1",
+      "bet": 1234123414,
+      "percent": 70,
+      "side": "less",
+      "roll": 919009,
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764430832144
+    },
+    {
+      "username": "1",
+      "bet": 16719971.27,
+      "percent": 97,
+      "side": "more",
+      "roll": 27536,
+      "win": false,
+      "payout": 0,
+      "timestamp": 1764423766319
+    },
+    {
+      "username": "1",
+      "bet": 16719971.27,
+      "percent": 97,
+      "side": "less",
+      "roll": 674975,
+      "win": true,
+      "payout": 16892342.11,
+      "timestamp": 1764423762098
+    },
+    {
+      "username": "1",
+      "bet": 16719971.27,
+      "percent": 97,
+      "side": "less",
+      "roll": 8919,
+      "win": true,
+      "payout": 16892342.11,
+      "timestamp": 1764423760101
+    },
+    {
+      "username": "1",
+      "bet": 16719971.27,
+      "percent": 97,
+      "side": "less",
+      "roll": 2582,
+      "win": true,
+      "payout": 16892342.11,
+      "timestamp": 1764423759922
+    },
+    {
+      "username": "1",
+      "bet": 16719971.27,
+      "percent": 97,
+      "side": "less",
+      "roll": 457582,
+      "win": true,
+      "payout": 16892342.11,
+      "timestamp": 1764423759464
+    }
+  ],
+  "plinkoHistory": [
+    {
+      "username": "Жмот",
+      "bet": 890,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 4.37,
+      "payout": 3889.3,
+      "bucket": 4,
+      "path": [
+        8,
+        7.5,
+        7,
+        7.5,
+        7,
+        6.5,
+        7,
+        6.5,
+        6,
+        5.5,
+        5,
+        5.5,
+        5,
+        4.5,
+        5,
+        4.5,
+        4
+      ],
+      "timestamp": 1764576777693
+    },
+    {
+      "username": "Жмот",
+      "bet": 890,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 0.2,
+      "payout": 178,
+      "bucket": 7,
+      "path": [
+        8,
+        7.5,
+        7,
+        7.5,
+        7,
+        6.5,
+        7,
+        6.5,
+        7,
+        6.5,
+        7,
+        7.5,
+        7,
+        7.5,
+        7,
+        6.5,
+        7
+      ],
+      "timestamp": 1764576775895
+    },
+    {
+      "username": "Жмот",
+      "bet": 890,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 0.78,
+      "payout": 694.2,
+      "bucket": 10,
+      "path": [
+        8,
+        7.5,
+        8,
+        8.5,
+        8,
+        7.5,
+        8,
+        8.5,
+        9,
+        8.5,
+        8,
+        8.5,
+        9,
+        8.5,
+        9,
+        9.5,
+        10
+      ],
+      "timestamp": 1764576774004
+    },
+    {
+      "username": "Жмот",
+      "bet": 890,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 0.2,
+      "payout": 178,
+      "bucket": 9,
+      "path": [
+        8,
+        7.5,
+        7,
+        7.5,
+        8,
+        7.5,
+        7,
+        7.5,
+        8,
+        8.5,
+        9,
+        9.5,
+        10,
+        10.5,
+        10,
+        9.5,
+        9
+      ],
+      "timestamp": 1764576768568
+    },
+    {
+      "username": "Жмот",
+      "bet": 560,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 0.78,
+      "payout": 436.8,
+      "bucket": 10,
+      "path": [
+        8,
+        7.5,
+        7,
+        7.5,
+        8,
+        8.5,
+        8,
+        7.5,
+        8,
+        8.5,
+        9,
+        9.5,
+        9,
+        9.5,
+        9,
+        9.5,
+        10
+      ],
+      "timestamp": 1764576754567
+    },
+    {
+      "username": "Жмот",
+      "bet": 800,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 12.02,
+      "payout": 9616,
+      "bucket": 14,
+      "path": [
+        8,
+        8.5,
+        9,
+        9.5,
+        9,
+        9.5,
+        10,
+        10.5,
+        11,
+        11.5,
+        11,
+        11.5,
+        12,
+        12.5,
+        13,
+        13.5,
+        14
+      ],
+      "timestamp": 1764576742849
+    },
+    {
+      "username": "Жмот",
+      "bet": 760,
+      "risk": "high",
+      "rows": 16,
+      "multiplier": 0.2,
+      "payout": 152,
+      "bucket": 8,
+      "path": [
+        8,
+        7.5,
+        7,
+        7.5,
+        7,
+        7.5,
+        7,
+        6.5,
+        7,
+        7.5,
+        7,
+        7.5,
+        7,
+        7.5,
+        7,
+        7.5,
+        8
+      ],
+      "timestamp": 1764576709328
+    },
+    {
+      "username": "Жмот",
+      "bet": 760,
+      "risk": "high",
+      "rows": 12,
+      "multiplier": 0.2,
+      "payout": 152,
+      "bucket": 7,
+      "path": [
+        6,
+        6.5,
+        7,
+        6.5,
+        6,
+        6.5,
+        7,
+        6.5,
+        7,
+        6.5,
+        7,
+        7.5,
+        7
+      ],
+      "timestamp": 1764576691300
+    },
+    {
+      "username": "Жмот",
+      "bet": 350,
+      "risk": "medium",
+      "rows": 12,
+      "multiplier": 7.51,
+      "payout": 2628.5,
+      "bucket": 11,
+      "path": [
+        6,
+        6.5,
+        6,
+        6.5,
+        7,
+        7.5,
+        8,
+        8.5,
+        9,
+        9.5,
+        10,
+        10.5,
+        11
+      ],
+      "timestamp": 1764576668430
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 1000,
+      "payout": 100000000,
+      "bucket": 8,
+      "path": [
+        4,
+        4.5,
+        5,
+        5.5,
+        6,
+        6.5,
+        7,
+        7.5,
+        8
+      ],
+      "timestamp": 1764576258963
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        4.5,
+        4,
+        4.5,
+        4,
+        4.5,
+        4,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576258670
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        3.5,
+        3,
+        3.5,
+        3,
+        2.5,
+        3,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576258511
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        4.5,
+        5,
+        4.5,
+        4,
+        4.5,
+        4,
+        4.5,
+        4
+      ],
+      "timestamp": 1764576258418
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 3,
+      "path": [
+        4,
+        4.5,
+        5,
+        4.5,
+        4,
+        3.5,
+        3,
+        2.5,
+        3
+      ],
+      "timestamp": 1764576258197
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 3,
+      "path": [
+        4,
+        4.5,
+        4,
+        3.5,
+        4,
+        4.5,
+        4,
+        3.5,
+        3
+      ],
+      "timestamp": 1764576258004
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 5,
+      "path": [
+        4,
+        3.5,
+        3,
+        3.5,
+        3,
+        3.5,
+        4,
+        4.5,
+        5
+      ],
+      "timestamp": 1764576257834
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 5,
+      "path": [
+        4,
+        4.5,
+        4,
+        4.5,
+        5,
+        5.5,
+        5,
+        4.5,
+        5
+      ],
+      "timestamp": 1764576257618
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        3.5,
+        4,
+        4.5,
+        4,
+        3.5,
+        4,
+        4.5,
+        4
+      ],
+      "timestamp": 1764576257389
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 3,
+      "path": [
+        4,
+        4.5,
+        4,
+        3.5,
+        3,
+        3.5,
+        3,
+        2.5,
+        3
+      ],
+      "timestamp": 1764576257130
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 3,
+      "path": [
+        4,
+        3.5,
+        4,
+        4.5,
+        5,
+        4.5,
+        4,
+        3.5,
+        3
+      ],
+      "timestamp": 1764576256880
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        4.5,
+        4,
+        3.5,
+        4,
+        3.5,
+        4,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576256666
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        3.5,
+        4,
+        4.5,
+        5,
+        4.5,
+        5,
+        4.5,
+        4
+      ],
+      "timestamp": 1764576256411
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 3,
+      "path": [
+        4,
+        3.5,
+        4,
+        3.5,
+        4,
+        3.5,
+        3,
+        3.5,
+        3
+      ],
+      "timestamp": 1764576256210
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        4.5,
+        5,
+        5.5,
+        5,
+        4.5,
+        4,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576255957
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 1.85,
+      "payout": 185000,
+      "bucket": 2,
+      "path": [
+        4,
+        3.5,
+        3,
+        2.5,
+        3,
+        2.5,
+        2,
+        1.5,
+        2
+      ],
+      "timestamp": 1764576255737
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        3.5,
+        4,
+        4.5,
+        4,
+        3.5,
+        4,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576255440
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        3.5,
+        4,
+        4.5,
+        4,
+        3.5,
+        3,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576255318
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        3.5,
+        4,
+        3.5,
+        4,
+        3.5,
+        3,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576254978
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.33,
+      "payout": 33000,
+      "bucket": 5,
+      "path": [
+        4,
+        4.5,
+        5,
+        5.5,
+        6,
+        5.5,
+        5,
+        5.5,
+        5
+      ],
+      "timestamp": 1764576254827
+    },
+    {
+      "username": "кайфтыпоймалов",
+      "bet": 100000,
+      "risk": "high",
+      "rows": 8,
+      "multiplier": 0.2,
+      "payout": 20000,
+      "bucket": 4,
+      "path": [
+        4,
+        4.5,
+        5,
+        4.5,
+        4,
+        3.5,
+        4,
+        3.5,
+        4
+      ],
+      "timestamp": 1764576254532
+    }
+  ]
 }
