@@ -2,42 +2,42 @@
   {
     "username": "koty",
     "passwordHash": "1d28c120568c10e19b9d8abe8b66d0983fa3d2e11ee7751aca50f83c6f4a43aa",
-    "balance": 0,
+    "balance": 123123,
     "ip": "85.249.25.87",
     "banned": false
   },
   {
     "username": "имиль препод",
     "passwordHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
-    "balance": 0,
+    "balance": 123123,
     "ip": "85.26.165.97",
     "banned": false
   },
   {
     "username": "кайфтыпоймалов",
     "passwordHash": "ec429bb0ca74e6a730cd7eccd5a44404d98a3fb88f57c91087736ff6121827cc",
-    "balance": 0,
+    "balance": 133216613,
     "ip": "89.223.104.125",
     "banned": false
   },
   {
     "username": "arkaha",
     "passwordHash": "de70fa60cac227cbc13270a26ccde291af94df086959f0958122aedf154d90b5",
-    "balance": 0,
+    "balance": 59703953,
     "ip": "2.63.251.160",
     "banned": false
   },
   {
     "username": "kamila",
     "passwordHash": "a486d8c27c4089e9761ea5ccf739a068672b0fb151d7384d4b31088ca44e8216",
-    "balance": 0,
+    "balance": 123123,
     "ip": "91.107.102.210",
     "banned": false
   },
   {
     "username": "makan revrese nakam",
     "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
-    "balance": 0,
+    "balance": 123123,
     "ip": "81.222.188.207",
     "banned": false
   },
@@ -109,6 +109,69 @@
     "passwordHash": "82a56158d617b3e6662e6ef93ba25082200bab77519e40410674c1dd9b80c860",
     "balance": 0,
     "ip": "81.222.188.207",
+    "banned": false
+  },
+  {
+    "username": "1",
+    "passwordHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "balance": 0,
+    "ip": "176.52.101.225",
+    "banned": false
+  },
+  {
+    "username": "лимон",
+    "passwordHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "balance": 123123,
+    "ip": "87.117.185.67, 162.159.122.79",
+    "banned": false
+  },
+  {
+    "username": "Abcdabcd",
+    "passwordHash": "3bc49b73e2fb201924d9dcce5fb6d6fd7cfbf58c49be8cc46439c05dc634b151",
+    "balance": 123123,
+    "ip": "195.128.99.62, 172.68.159.205",
+    "banned": false
+  },
+  {
+    "username": "arka",
+    "passwordHash": "de70fa60cac227cbc13270a26ccde291af94df086959f0958122aedf154d90b5",
+    "balance": 123123,
+    "ip": "185.170.114.135, 104.23.239.41",
+    "banned": false
+  },
+  {
+    "username": "12",
+    "passwordHash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "balance": 121974.18,
+    "ip": "83.149.21.194, 172.64.223.228",
+    "banned": false
+  },
+  {
+    "username": "Алом",
+    "passwordHash": "48c86b4d5fb161db63b2956e01d6e2a6c757d80d7bec3864743d30af61edb5bf",
+    "balance": 115565.62,
+    "ip": "176.15.223.173",
+    "banned": false
+  },
+  {
+    "username": "detestation",
+    "passwordHash": "385fb8f2d814af097149e4d7a3ba446bb8e3f524bc2ea50e167f26edd788cf1d",
+    "balance": 123123,
+    "ip": "91.244.254.43",
+    "banned": false
+  },
+  {
+    "username": "Kotyy",
+    "passwordHash": "2ac9a6746aca543af8dff39894cfe8173afba21eb01c6fae33d52947222855ef",
+    "balance": 1000,
+    "ip": "176.15.221.100",
+    "banned": false
+  },
+  {
+    "username": "Жмот",
+    "passwordHash": "59dddde5322066d2514328a0f271b4551a05f8416f8773f5f234c7318d2e66fe",
+    "balance": 10615.95,
+    "ip": "91.244.254.43",
     "banned": false
   }
 ]
