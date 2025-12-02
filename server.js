@@ -1655,7 +1655,7 @@ const BASE_SPEED   = 0.05;          // базовая скорость (в 1/sec
 const ACCEL        = 0.08;         // ускорение (в 1/sec²)
 
 let currentCrash = {
-  players: [],        // { username, bet, color, cashedOut, cashoutCoef, winnings }
+  players: [],        // { username, bet, color, cashedOut, cashoutCoef, winnings, autoCashout }
   bettingEndTime: null, // когда завершается фаза ставок (timestamp)
   crashTime: null,    // когда наступит краш (timestamp)
   crashPoint: null,   // целевой коэффициент
@@ -1664,15 +1664,6 @@ let currentCrash = {
 };
 
 let nextCrashPoint = null; // Заданный админом коэффициент для следующего раунда
-
-function getRandomColor() {
-  const letters = '0123456789ABCDEF';
-  let color = '#';
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
-}
 
 function generateCrashPoint() {
   // Если админ задал коэффициент для следующего раунда, используем его
@@ -1706,6 +1697,10 @@ function endCrashRound() {
   if (currentCrash.ended) return;
 
   const now = Date.now();
+  
+  // Проверяем автозаборы в последний раз перед завершением
+  checkAutoCashouts();
+
   const timestamp = now;
   const totalBet = currentCrash.players.reduce((sum, p) => sum + p.bet, 0);
 
@@ -1779,8 +1774,6 @@ function startNewCrashRound() {
   lastCrashResult = null;
 }
 
-// ========== ЭНДПОЙНТЫ «КРАШ» ==========
-
 // Функция для проверки и выполнения автозабора
 function checkAutoCashouts() {
   if (currentCrash.ended || !currentCrash.crashTime || !currentCrash.bettingEndTime) {
@@ -1804,6 +1797,7 @@ function checkAutoCashouts() {
     }
     
     // Если текущий коэффициент достиг или превысил целевой автозабора
+    // И при этом еще не наступил краш
     if (currentCoef >= participant.autoCashout && currentCoef < currentCrash.crashPoint) {
       // Выполняем автозабор
       const baseWinnings = participant.bet * participant.autoCashout;
@@ -1816,9 +1810,19 @@ function checkAutoCashouts() {
       participant.cashedOut = true;
       participant.cashoutCoef = participant.autoCashout;
       participant.winnings = winnings;
+      console.log(`✅ Автовывод для ${participant.username} на ${participant.autoCashout.toFixed(2)}x`);
     }
   });
 }
+
+// Запускаем интервал для регулярной проверки автовыводов
+setInterval(() => {
+  if (!currentCrash.ended) {
+    checkAutoCashouts();
+  }
+}, 100);
+
+// ========== ЭНДПОЙНТЫ «КРАШ» ==========
 
 // GET /crash/state → текущее состояние
 app.get('/crash/state', (req, res) => {
